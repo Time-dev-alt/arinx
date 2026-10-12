@@ -10,14 +10,29 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as HistoryRouteImport } from './routes/history'
+import { Route as LibraryRouteImport } from './routes/library'
 import { Route as ResultsRouteImport } from './routes/results'
 import { Route as ShortsRouteImport } from './routes/shorts'
+import { Route as SubscriptionsRouteImport } from './routes/subscriptions'
+import { Route as TrendingRouteImport } from './routes/trending'
 import { Route as ChannelHandleRouteImport } from './routes/channel.$handle'
+import { Route as PlaylistIdRouteImport } from './routes/playlist.$id'
 import { Route as WatchIdRouteImport } from './routes/watch.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HistoryRoute = HistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LibraryRoute = LibraryRouteImport.update({
+  id: '/library',
+  path: '/library',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResultsRoute = ResultsRouteImport.update({
@@ -30,9 +45,24 @@ const ShortsRoute = ShortsRouteImport.update({
   path: '/shorts',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SubscriptionsRoute = SubscriptionsRouteImport.update({
+  id: '/subscriptions',
+  path: '/subscriptions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TrendingRoute = TrendingRouteImport.update({
+  id: '/trending',
+  path: '/trending',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ChannelHandleRoute = ChannelHandleRouteImport.update({
   id: '/channel/$handle',
   path: '/channel/$handle',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlaylistIdRoute = PlaylistIdRouteImport.update({
+  id: '/playlist/$id',
+  path: '/playlist/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const WatchIdRoute = WatchIdRouteImport.update({
@@ -43,45 +73,90 @@ const WatchIdRoute = WatchIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/history': typeof HistoryRoute
+  '/library': typeof LibraryRoute
   '/results': typeof ResultsRoute
   '/shorts': typeof ShortsRoute
+  '/subscriptions': typeof SubscriptionsRoute
+  '/trending': typeof TrendingRoute
   '/channel/$handle': typeof ChannelHandleRoute
+  '/playlist/$id': typeof PlaylistIdRoute
   '/watch/$id': typeof WatchIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/history': typeof HistoryRoute
+  '/library': typeof LibraryRoute
   '/results': typeof ResultsRoute
   '/shorts': typeof ShortsRoute
+  '/subscriptions': typeof SubscriptionsRoute
+  '/trending': typeof TrendingRoute
   '/channel/$handle': typeof ChannelHandleRoute
+  '/playlist/$id': typeof PlaylistIdRoute
   '/watch/$id': typeof WatchIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/history': typeof HistoryRoute
+  '/library': typeof LibraryRoute
   '/results': typeof ResultsRoute
   '/shorts': typeof ShortsRoute
+  '/subscriptions': typeof SubscriptionsRoute
+  '/trending': typeof TrendingRoute
   '/channel/$handle': typeof ChannelHandleRoute
+  '/playlist/$id': typeof PlaylistIdRoute
   '/watch/$id': typeof WatchIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/results' | '/shorts' | '/channel/$handle' | '/watch/$id'
+  fullPaths:
+    | '/'
+    | '/history'
+    | '/library'
+    | '/results'
+    | '/shorts'
+    | '/subscriptions'
+    | '/trending'
+    | '/channel/$handle'
+    | '/playlist/$id'
+    | '/watch/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/results' | '/shorts' | '/channel/$handle' | '/watch/$id'
+  to:
+    | '/'
+    | '/history'
+    | '/library'
+    | '/results'
+    | '/shorts'
+    | '/subscriptions'
+    | '/trending'
+    | '/channel/$handle'
+    | '/playlist/$id'
+    | '/watch/$id'
   id:
     | '__root__'
     | '/'
+    | '/history'
+    | '/library'
     | '/results'
     | '/shorts'
+    | '/subscriptions'
+    | '/trending'
     | '/channel/$handle'
+    | '/playlist/$id'
     | '/watch/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  HistoryRoute: typeof HistoryRoute
+  LibraryRoute: typeof LibraryRoute
   ResultsRoute: typeof ResultsRoute
   ShortsRoute: typeof ShortsRoute
+  SubscriptionsRoute: typeof SubscriptionsRoute
+  TrendingRoute: typeof TrendingRoute
   ChannelHandleRoute: typeof ChannelHandleRoute
+  PlaylistIdRoute: typeof PlaylistIdRoute
   WatchIdRoute: typeof WatchIdRoute
 }
 
@@ -92,6 +167,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/history': {
+      id: '/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof HistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/library': {
+      id: '/library'
+      path: '/library'
+      fullPath: '/library'
+      preLoaderRoute: typeof LibraryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/results': {
@@ -108,11 +197,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShortsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/subscriptions': {
+      id: '/subscriptions'
+      path: '/subscriptions'
+      fullPath: '/subscriptions'
+      preLoaderRoute: typeof SubscriptionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/trending': {
+      id: '/trending'
+      path: '/trending'
+      fullPath: '/trending'
+      preLoaderRoute: typeof TrendingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/channel/$handle': {
       id: '/channel/$handle'
       path: '/channel/$handle'
       fullPath: '/channel/$handle'
       preLoaderRoute: typeof ChannelHandleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/playlist/$id': {
+      id: '/playlist/$id'
+      path: '/playlist/$id'
+      fullPath: '/playlist/$id'
+      preLoaderRoute: typeof PlaylistIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/watch/$id': {
@@ -127,9 +237,14 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  HistoryRoute: HistoryRoute,
+  LibraryRoute: LibraryRoute,
   ResultsRoute: ResultsRoute,
   ShortsRoute: ShortsRoute,
+  SubscriptionsRoute: SubscriptionsRoute,
+  TrendingRoute: TrendingRoute,
   ChannelHandleRoute: ChannelHandleRoute,
+  PlaylistIdRoute: PlaylistIdRoute,
   WatchIdRoute: WatchIdRoute,
 }
 export const routeTree = rootRouteImport
