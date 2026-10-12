@@ -10,33 +10,193 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as HistoryRouteImport } from './routes/history'
+import { Route as LibraryRouteImport } from './routes/library'
+import { Route as ResultsRouteImport } from './routes/results'
+import { Route as ShortsRouteImport } from './routes/shorts'
+import { Route as SubscriptionsRouteImport } from './routes/subscriptions'
+import { Route as TrendingRouteImport } from './routes/trending'
+import { Route as ChannelHandleRouteImport } from './routes/channel.$handle'
+import { Route as PlaylistIdRouteImport } from './routes/playlist.$id'
+import { Route as StudioIndexRouteImport } from './routes/studio.index'
+import { Route as StudioCustomizeRouteImport } from './routes/studio.customize'
+import { Route as StudioUploadRouteImport } from './routes/studio.upload'
+import { Route as WatchIdRouteImport } from './routes/watch.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const HistoryRoute = HistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LibraryRoute = LibraryRouteImport.update({
+  id: '/library',
+  path: '/library',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResultsRoute = ResultsRouteImport.update({
+  id: '/results',
+  path: '/results',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShortsRoute = ShortsRouteImport.update({
+  id: '/shorts',
+  path: '/shorts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SubscriptionsRoute = SubscriptionsRouteImport.update({
+  id: '/subscriptions',
+  path: '/subscriptions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TrendingRoute = TrendingRouteImport.update({
+  id: '/trending',
+  path: '/trending',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChannelHandleRoute = ChannelHandleRouteImport.update({
+  id: '/channel/$handle',
+  path: '/channel/$handle',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlaylistIdRoute = PlaylistIdRouteImport.update({
+  id: '/playlist/$id',
+  path: '/playlist/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudioIndexRoute = StudioIndexRouteImport.update({
+  id: '/studio/',
+  path: '/studio/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudioCustomizeRoute = StudioCustomizeRouteImport.update({
+  id: '/studio/customize',
+  path: '/studio/customize',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudioUploadRoute = StudioUploadRouteImport.update({
+  id: '/studio/upload',
+  path: '/studio/upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WatchIdRoute = WatchIdRouteImport.update({
+  id: '/watch/$id',
+  path: '/watch/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/history': typeof HistoryRoute
+  '/library': typeof LibraryRoute
+  '/results': typeof ResultsRoute
+  '/shorts': typeof ShortsRoute
+  '/subscriptions': typeof SubscriptionsRoute
+  '/trending': typeof TrendingRoute
+  '/channel/$handle': typeof ChannelHandleRoute
+  '/playlist/$id': typeof PlaylistIdRoute
+  '/studio/customize': typeof StudioCustomizeRoute
+  '/studio/upload': typeof StudioUploadRoute
+  '/watch/$id': typeof WatchIdRoute
+  '/studio/': typeof StudioIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/history': typeof HistoryRoute
+  '/library': typeof LibraryRoute
+  '/results': typeof ResultsRoute
+  '/shorts': typeof ShortsRoute
+  '/subscriptions': typeof SubscriptionsRoute
+  '/trending': typeof TrendingRoute
+  '/channel/$handle': typeof ChannelHandleRoute
+  '/playlist/$id': typeof PlaylistIdRoute
+  '/studio/customize': typeof StudioCustomizeRoute
+  '/studio/upload': typeof StudioUploadRoute
+  '/watch/$id': typeof WatchIdRoute
+  '/studio': typeof StudioIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/history': typeof HistoryRoute
+  '/library': typeof LibraryRoute
+  '/results': typeof ResultsRoute
+  '/shorts': typeof ShortsRoute
+  '/subscriptions': typeof SubscriptionsRoute
+  '/trending': typeof TrendingRoute
+  '/channel/$handle': typeof ChannelHandleRoute
+  '/playlist/$id': typeof PlaylistIdRoute
+  '/studio/customize': typeof StudioCustomizeRoute
+  '/studio/upload': typeof StudioUploadRoute
+  '/watch/$id': typeof WatchIdRoute
+  '/studio/': typeof StudioIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/history'
+    | '/library'
+    | '/results'
+    | '/shorts'
+    | '/subscriptions'
+    | '/trending'
+    | '/channel/$handle'
+    | '/playlist/$id'
+    | '/studio/customize'
+    | '/studio/upload'
+    | '/watch/$id'
+    | '/studio/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/history'
+    | '/library'
+    | '/results'
+    | '/shorts'
+    | '/subscriptions'
+    | '/trending'
+    | '/channel/$handle'
+    | '/playlist/$id'
+    | '/studio/customize'
+    | '/studio/upload'
+    | '/watch/$id'
+    | '/studio'
+  id:
+    | '__root__'
+    | '/'
+    | '/history'
+    | '/library'
+    | '/results'
+    | '/shorts'
+    | '/subscriptions'
+    | '/trending'
+    | '/channel/$handle'
+    | '/playlist/$id'
+    | '/studio/customize'
+    | '/studio/upload'
+    | '/watch/$id'
+    | '/studio/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  HistoryRoute: typeof HistoryRoute
+  LibraryRoute: typeof LibraryRoute
+  ResultsRoute: typeof ResultsRoute
+  ShortsRoute: typeof ShortsRoute
+  SubscriptionsRoute: typeof SubscriptionsRoute
+  TrendingRoute: typeof TrendingRoute
+  ChannelHandleRoute: typeof ChannelHandleRoute
+  PlaylistIdRoute: typeof PlaylistIdRoute
+  StudioCustomizeRoute: typeof StudioCustomizeRoute
+  StudioUploadRoute: typeof StudioUploadRoute
+  WatchIdRoute: typeof WatchIdRoute
+  StudioIndexRoute: typeof StudioIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +208,107 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/history': {
+      id: '/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof HistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/library': {
+      id: '/library'
+      path: '/library'
+      fullPath: '/library'
+      preLoaderRoute: typeof LibraryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/results': {
+      id: '/results'
+      path: '/results'
+      fullPath: '/results'
+      preLoaderRoute: typeof ResultsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/shorts': {
+      id: '/shorts'
+      path: '/shorts'
+      fullPath: '/shorts'
+      preLoaderRoute: typeof ShortsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/subscriptions': {
+      id: '/subscriptions'
+      path: '/subscriptions'
+      fullPath: '/subscriptions'
+      preLoaderRoute: typeof SubscriptionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/trending': {
+      id: '/trending'
+      path: '/trending'
+      fullPath: '/trending'
+      preLoaderRoute: typeof TrendingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/channel/$handle': {
+      id: '/channel/$handle'
+      path: '/channel/$handle'
+      fullPath: '/channel/$handle'
+      preLoaderRoute: typeof ChannelHandleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/playlist/$id': {
+      id: '/playlist/$id'
+      path: '/playlist/$id'
+      fullPath: '/playlist/$id'
+      preLoaderRoute: typeof PlaylistIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/studio/': {
+      id: '/studio/'
+      path: '/studio'
+      fullPath: '/studio/'
+      preLoaderRoute: typeof StudioIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/studio/customize': {
+      id: '/studio/customize'
+      path: '/studio/customize'
+      fullPath: '/studio/customize'
+      preLoaderRoute: typeof StudioCustomizeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/studio/upload': {
+      id: '/studio/upload'
+      path: '/studio/upload'
+      fullPath: '/studio/upload'
+      preLoaderRoute: typeof StudioUploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/watch/$id': {
+      id: '/watch/$id'
+      path: '/watch/$id'
+      fullPath: '/watch/$id'
+      preLoaderRoute: typeof WatchIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  HistoryRoute: HistoryRoute,
+  LibraryRoute: LibraryRoute,
+  ResultsRoute: ResultsRoute,
+  ShortsRoute: ShortsRoute,
+  SubscriptionsRoute: SubscriptionsRoute,
+  TrendingRoute: TrendingRoute,
+  ChannelHandleRoute: ChannelHandleRoute,
+  PlaylistIdRoute: PlaylistIdRoute,
+  StudioCustomizeRoute: StudioCustomizeRoute,
+  StudioUploadRoute: StudioUploadRoute,
+  WatchIdRoute: WatchIdRoute,
+  StudioIndexRoute: StudioIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
