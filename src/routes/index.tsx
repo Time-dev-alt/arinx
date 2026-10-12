@@ -4,29 +4,13 @@ import { Zap } from "lucide-react";
 import { CATEGORIES } from "@/lib/data";
 import { pageHead } from "@/lib/format";
 import { publicVideos, recommend, useAppState } from "@/lib/store";
-import { ShortCard, VideoCard } from "@/components/VideoCard";
-import { cn } from "@/lib/utils";
+import { ShortCard } from "@/components/VideoCard";
+import { Grid, Pills } from "@/components/common";
 
 export const Route = createFileRoute("/")({
   head: () => pageHead("Home", "Personalized video recommendations, trending picks and Shorts on ArinX."),
   component: Index,
 });
-
-export function Pills({ items, value, onChange }: { items: string[]; value: string; onChange: (v: string) => void }) {
-  return (
-    <div className="no-scrollbar flex gap-3 overflow-x-auto">
-      {items.map((c) => (
-        <button
-          key={c}
-          onClick={() => onChange(c)}
-          className={cn("shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium transition", value === c ? "bg-foreground text-background" : "bg-muted hover:bg-accent")}
-        >
-          {c}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 function Index() {
   const s = useAppState();
@@ -56,10 +40,3 @@ function Index() {
   );
 }
 
-export function Grid({ vids }: { vids: ReturnType<typeof publicVideos> }) {
-  return (
-    <div className="mt-2 grid gap-x-4 gap-y-10 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-      {vids.map((v) => <VideoCard key={v.id} v={v} />)}
-    </div>
-  );
-}

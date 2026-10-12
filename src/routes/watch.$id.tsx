@@ -6,10 +6,10 @@ import { Player, type PlayerHandle } from "@/components/Player";
 import { Comments } from "@/components/Comments";
 import { SaveDialog } from "@/components/SaveDialog";
 import { Empty, VideoRow } from "@/components/VideoCard";
-import { Pills } from "@/routes/index";
+import { Pills, SubscribeButton } from "@/components/common";
 import { compact, ago, pageHead, parseTime, subs } from "@/lib/format";
 import { getChannel, getVideo, recommend, setState, toggleIn, useAppState } from "@/lib/store";
-import { ME_ID, SEED_VIDEOS } from "@/lib/data";
+import { SEED_VIDEOS } from "@/lib/data";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/watch/$id")({
@@ -19,24 +19,6 @@ export const Route = createFileRoute("/watch/$id")({
   },
   component: Watch,
 });
-
-export function SubscribeButton({ channelId }: { channelId: string }) {
-  const s = useAppState();
-  if (channelId === ME_ID)
-    return <Link to="/studio" className="rounded-full bg-muted px-4 py-2 text-sm font-medium hover:bg-accent">Manage videos</Link>;
-  const on = s.subscriptions.includes(channelId);
-  return (
-    <button
-      onClick={() => {
-        setState((st) => ({ subscriptions: toggleIn(st.subscriptions, channelId) }));
-        toast(on ? "Subscription removed" : "Subscribed!");
-      }}
-      className={cn("rounded-full px-4 py-2 text-sm font-medium transition", on ? "bg-muted hover:bg-accent" : "bg-foreground text-background hover:opacity-90")}
-    >
-      {on ? "Subscribed" : "Subscribe"}
-    </button>
-  );
-}
 
 function Description({ text, tags, views, at, onSeek }: { text: string; tags: string[]; views: number; at: string; onSeek: (t: number) => void }) {
   const [open, setOpen] = useState(false);

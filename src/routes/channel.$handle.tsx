@@ -4,7 +4,7 @@ import { COMMUNITY, ME_ID } from "@/lib/data";
 import { ago, compact, pageHead } from "@/lib/format";
 import { allVideos, getChannels, useAppState } from "@/lib/store";
 import { Empty, ShortCard, VideoCard } from "@/components/VideoCard";
-import { SubscribeButton } from "@/routes/watch.$id";
+import { SubscribeButton } from "@/components/common";
 import { cn } from "@/lib/utils";
 
 const TABS = ["Home", "Videos", "Shorts", "Playlists", "Community", "About"] as const;

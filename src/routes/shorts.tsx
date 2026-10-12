@@ -4,7 +4,7 @@ import { MessageSquare, Share2, ThumbsDown, ThumbsUp, Volume2, VolumeX, X, Play 
 import { toast } from "sonner";
 import { Comments } from "@/components/Comments";
 import { useResolvedSrc } from "@/components/Player";
-import { SubscribeButton } from "@/routes/watch.$id";
+import { SubscribeButton } from "@/components/common";
 import type { Video } from "@/lib/data";
 import { compact, pageHead } from "@/lib/format";
 import { getChannel, publicVideos, setState, toggleIn, useAppState } from "@/lib/store";

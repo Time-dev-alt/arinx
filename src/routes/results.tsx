@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 import { Empty, ShortCard, VideoRow } from "@/components/VideoCard";
-import { SubscribeButton } from "@/routes/watch.$id";
+import { SubscribeButton } from "@/components/common";
 import { compact, pageHead } from "@/lib/format";
 import { getChannels, publicVideos, useAppState } from "@/lib/store";
 import { cn } from "@/lib/utils";
