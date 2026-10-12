@@ -1,24 +1,65 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
+import { Zap } from "lucide-react";
+import { CATEGORIES } from "@/lib/data";
+import { pageHead } from "@/lib/format";
+import { publicVideos, recommend, useAppState } from "@/lib/store";
+import { ShortCard, VideoCard } from "@/components/VideoCard";
+import { cn } from "@/lib/utils";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
+  head: () => pageHead("Home", "Personalized video recommendations, trending picks and Shorts on ArinX."),
   component: Index,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
+export function Pills({ items, value, onChange }: { items: string[]; value: string; onChange: (v: string) => void }) {
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
+    <div className="no-scrollbar flex gap-3 overflow-x-auto">
+      {items.map((c) => (
+        <button
+          key={c}
+          onClick={() => onChange(c)}
+          className={cn("shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium transition", value === c ? "bg-foreground text-background" : "bg-muted hover:bg-accent")}
+        >
+          {c}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Index() {
+  const s = useAppState();
+  const [cat, setCat] = useState("All");
+  const pills = ["All", ...CATEGORIES, "Recently uploaded"];
+  let vids = recommend(s);
+  if (cat === "Recently uploaded") vids = [...vids].sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt));
+  else if (cat !== "All") vids = vids.filter((v) => v.category === cat);
+  const shorts = publicVideos(s).filter((v) => v.isShort && (cat === "All" || v.category === cat)).slice(0, 12);
+  const first = vids.slice(0, 8);
+  const rest = vids.slice(8);
+
+  return (
+    <div className="px-4 pb-12 sm:px-6">
+      <div className="sticky top-14 z-20 -mx-4 bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+        <Pills items={pills} value={cat} onChange={setCat} />
+      </div>
+      <Grid vids={first} />
+      {shorts.length > 0 && (
+        <section className="my-8 border-y border-border py-6">
+          <h2 className="mb-4 flex items-center gap-2 font-display text-xl font-semibold"><Zap className="h-6 w-6 text-primary" /> Shorts</h2>
+          <div className="no-scrollbar flex gap-4 overflow-x-auto">{shorts.map((v) => <ShortCard key={v.id} v={v} />)}</div>
+        </section>
+      )}
+      <Grid vids={rest} />
+    </div>
+  );
+}
+
+export function Grid({ vids }: { vids: ReturnType<typeof publicVideos> }) {
+  return (
+    <div className="mt-2 grid gap-x-4 gap-y-10 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+      {vids.map((v) => <VideoCard key={v.id} v={v} />)}
     </div>
   );
 }
