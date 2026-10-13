@@ -8,7 +8,10 @@ import {
   Scripts,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
+import { AuthContext } from "@/lib/api";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -105,12 +108,26 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const router = useRouter();
+  const [auth, setAuth] = useState<{ session: Session | null; ready: boolean }>({ session: null, ready: false });
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setAuth({ session: data.session, ready: true }));
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      setAuth({ session, ready: true });
+      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
+      router.invalidate();
+      queryClient.invalidateQueries();
+    });
+    return () => data.subscription.unsubscribe();
+  }, [queryClient, router]);
   return (
     <QueryClientProvider client={queryClient}>
-      <AppShell>
-        <Outlet />
-      </AppShell>
-      <Toaster />
+      <AuthContext.Provider value={auth}>
+        <AppShell>
+          <Outlet />
+        </AppShell>
+        <Toaster />
+      </AuthContext.Provider>
     </QueryClientProvider>
   );
 }
