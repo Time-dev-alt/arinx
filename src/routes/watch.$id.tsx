@@ -68,7 +68,7 @@ function Watch() {
   useEffect(() => {
     if (isLoading) return <div className="p-6"><div className="aspect-video animate-pulse rounded-xl bg-muted" /></div>;
   if (!v) return;
-    actions.recordWatch(uid, id).then(() => qc.invalidateQueries({ queryKey: ["me"] }));
+    void actions.recordWatch(uid, id).then(() => qc.invalidateQueries({ queryKey: ["me"] }));
   }, [id, !!v, uid]);
 
   if (isLoading) return <div className="p-6"><div className="aspect-video animate-pulse rounded-xl bg-muted" /></div>;
