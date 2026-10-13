@@ -66,11 +66,11 @@ function Watch() {
   const [filter, setFilter] = useState("All");
 
   useEffect(() => {
-    if (isLoading) return <div className="p-6"><div className="aspect-video animate-pulse rounded-xl bg-muted" /></div>;
   if (!v) return;
     void actions.recordWatch(uid, id).then(() => qc.invalidateQueries({ queryKey: ["me"] }));
   }, [id, !!v, uid]);
 
+  if (isLoading) return <div className="p-6"><div className="aspect-video animate-pulse rounded-xl bg-muted" /></div>;
   if (isLoading) return <div className="p-6"><div className="aspect-video animate-pulse rounded-xl bg-muted" /></div>;
   if (!v) return <Empty title="Video unavailable" text="This video may have been removed or made private." />;
   const c = v.channel;
