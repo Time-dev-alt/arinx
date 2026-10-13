@@ -12,32 +12,10 @@ import {
   VolumeX,
 } from "lucide-react";
 import { duration as fmt } from "@/lib/format";
-import { getFile } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 export interface PlayerHandle {
   seek: (t: number) => void;
-}
-
-export function useResolvedSrc(src: string) {
-  const [url, setUrl] = useState(src.startsWith("idb:") ? "" : src);
-  useEffect(() => {
-    if (!src.startsWith("idb:")) {
-      setUrl(src);
-      return;
-    }
-    let obj = "";
-    getFile(src.slice(4)).then((b) => {
-      if (b) {
-        obj = URL.createObjectURL(b);
-        setUrl(obj);
-      }
-    });
-    return () => {
-      if (obj) URL.revokeObjectURL(obj);
-    };
-  }, [src]);
-  return url;
 }
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -46,7 +24,7 @@ export const Player = forwardRef<
   PlayerHandle,
   { src: string; poster?: string; theater?: boolean; onTheater?: () => void; onNext?: () => void }
 >(function Player({ src, poster, theater, onTheater, onNext }, ref) {
-  const url = useResolvedSrc(src);
+  const url = src;
   const wrap = useRef<HTMLDivElement>(null);
   const vid = useRef<HTMLVideoElement>(null);
   const bar = useRef<HTMLDivElement>(null);
