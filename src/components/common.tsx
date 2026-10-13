@@ -1,10 +1,18 @@
 import { Link } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { Video } from "@/lib/data";
-import { ME_ID } from "@/lib/data";
-import { setState, toggleIn, useAppState } from "@/lib/store";
+import { actions, initial, useAuth, useRequireAuth, useUserData, type Channel, type Video } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { VideoCard } from "./VideoCard";
+
+export function Avatar({ ch, className }: { ch: Pick<Channel, "name" | "avatar"> | null | undefined; className?: string }) {
+  if (ch?.avatar) return <img src={ch.avatar} alt="" className={cn("shrink-0 rounded-full object-cover", className)} />;
+  return (
+    <span className={cn("grid shrink-0 place-items-center rounded-full bg-primary font-semibold text-primary-foreground", className)}>
+      {initial(ch?.name ?? "?")}
+    </span>
+  );
+}
 
 export function Pills({ items, value, onChange }: { items: string[]; value: string; onChange: (v: string) => void }) {
   return (
@@ -31,16 +39,22 @@ export function Grid({ vids }: { vids: Video[] }) {
 }
 
 export function SubscribeButton({ channelId }: { channelId: string }) {
-  const s = useAppState();
-  if (channelId === ME_ID)
+  const { uid } = useAuth();
+  const u = useUserData();
+  const qc = useQueryClient();
+  const req = useRequireAuth();
+  if (channelId === uid)
     return <Link to="/studio" className="rounded-full bg-muted px-4 py-2 text-sm font-medium text-foreground hover:bg-accent">Manage videos</Link>;
-  const on = s.subscriptions.includes(channelId);
+  const on = u.subscriptions.includes(channelId);
   return (
     <button
-      onClick={() => {
-        setState((st) => ({ subscriptions: toggleIn(st.subscriptions, channelId) }));
-        toast(on ? "Subscription removed" : "Subscribed!");
-      }}
+      onClick={() =>
+        req("subscribe", async (id) => {
+          await actions.toggleSub(id, channelId, on);
+          await Promise.all([qc.invalidateQueries({ queryKey: ["me"] }), qc.invalidateQueries({ queryKey: ["channel"] }), qc.invalidateQueries({ queryKey: ["video"] })]);
+          toast(on ? "Subscription removed" : "Subscribed!");
+        })
+      }
       className={cn("rounded-full px-4 py-2 text-sm font-medium transition", on ? "bg-muted text-foreground hover:bg-accent" : "bg-foreground text-background hover:opacity-90")}
     >
       {on ? "Subscribed" : "Subscribe"}
@@ -48,6 +62,26 @@ export function SubscribeButton({ channelId }: { channelId: string }) {
   );
 }
 
-export function PageTitle({ children }: { children: React.ReactNode }) {
-  return <h1 className="mb-6 font-display text-3xl font-bold">{children}</h1>;
+export function SignInPrompt({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="py-24 text-center">
+      <p className="font-display text-xl font-semibold">{title}</p>
+      <p className="mt-2 text-sm text-muted-foreground">{text}</p>
+      <Link to="/auth" className="mt-6 inline-flex rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground">Sign in</Link>
+    </div>
+  );
+}
+
+export function Loading() {
+  return (
+    <div className="grid gap-x-4 gap-y-10 p-6 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div key={i}>
+          <div className="aspect-video animate-pulse rounded-xl bg-muted" />
+          <div className="mt-3 h-4 w-3/4 animate-pulse rounded bg-muted" />
+          <div className="mt-2 h-3 w-1/2 animate-pulse rounded bg-muted" />
+        </div>
+      ))}
+    </div>
+  );
 }

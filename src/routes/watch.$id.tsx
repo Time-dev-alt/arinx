@@ -8,15 +8,13 @@ import { SaveDialog } from "@/components/SaveDialog";
 import { Empty, VideoRow } from "@/components/VideoCard";
 import { Pills, SubscribeButton } from "@/components/common";
 import { compact, ago, pageHead, parseTime, subs } from "@/lib/format";
-import { getChannel, getVideo, recommend, setState, toggleIn, useAppState } from "@/lib/store";
-import { SEED_VIDEOS } from "@/lib/data";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { actions, publicVideosQuery, recommend, useAuth, useRequireAuth, useUserData, videoQuery, videoSrcQuery } from "@/lib/api";
+import { Avatar } from "@/components/common";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/watch/$id")({
-  head: ({ params }) => {
-    const v = SEED_VIDEOS.find((x) => x.id === params.id);
-    return pageHead(v?.title ?? "Watch", v ? v.description.split("\n\n")[1] : "Watch videos on ArinX.");
-  },
+  head: () => pageHead("Watch", "Watch videos on ArinX."),
   component: Watch,
 });
 
@@ -54,24 +52,35 @@ function Description({ text, tags, views, at, onSeek }: { text: string; tags: st
 
 function Watch() {
   const { id } = Route.useParams();
-  const s = useAppState();
+  const u = useUserData();
+  const { uid } = useAuth();
+  const qc = useQueryClient();
+  const req = useRequireAuth();
+  const { data: v, isLoading } = useQuery(videoQuery(id));
+  const { data: all = [] } = useQuery(publicVideosQuery());
+  const { data: src } = useQuery({ ...videoSrcQuery(v?.videoPath ?? ""), enabled: !!v });
   const nav = useNavigate();
-  const v = getVideo(s, id);
   const player = useRef<PlayerHandle>(null);
   const [theater, setTheater] = useState(false);
   const [save, setSave] = useState(false);
   const [filter, setFilter] = useState("All");
 
   useEffect(() => {
-    if (!v) return;
-    setState((st) => ({ history: [{ id, at: new Date().toISOString() }, ...st.history.filter((h) => h.id !== id)].slice(0, 200) }));
-  }, [id, !!v]);
+  if (!v) return;
+    void actions.recordWatch(uid, id).then(() => qc.invalidateQueries({ queryKey: ["me"] }));
+  }, [id, !!v, uid]);
 
+  if (isLoading) return <div className="p-6"><div className="aspect-video animate-pulse rounded-xl bg-muted" /></div>;
+  if (isLoading) return <div className="p-6"><div className="aspect-video animate-pulse rounded-xl bg-muted" /></div>;
   if (!v) return <Empty title="Video unavailable" text="This video may have been removed or made private." />;
-  const c = getChannel(s, v.channelId)!;
-  const liked = s.liked.includes(id);
-  const disliked = s.disliked.includes(id);
-  let related = recommend(s, id);
+  const c = v.channel;
+  const liked = u.liked.includes(id);
+  const disliked = u.disliked.includes(id);
+  const react = (val: 1 | -1) => req("rate videos", async (me) => {
+    await actions.react(me, id, val, liked ? 1 : disliked ? -1 : 0);
+    await Promise.all([qc.invalidateQueries({ queryKey: ["me"] }), qc.invalidateQueries({ queryKey: ["video", id] })]);
+  });
+  let related = recommend(all, u, id);
   const sameCh = related.filter((x) => x.channelId === v.channelId);
   if (filter === `From ${c.name}`) related = sameCh;
   else if (filter === v.category) related = related.filter((x) => x.category === v.category);
@@ -90,10 +99,10 @@ function Watch() {
       <h1 className="mt-3 font-display text-xl font-semibold leading-tight">{v.title}</h1>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <Link to="/channel/$handle" params={{ handle: c.handle }}><img src={c.avatar} alt="" className="h-10 w-10 rounded-full object-cover" /></Link>
+          <Link to="/channel/$handle" params={{ handle: c.handle }}><Avatar ch={c} className="h-10 w-10" /></Link>
           <div>
             <Link to="/channel/$handle" params={{ handle: c.handle }} className="font-semibold">{c.name}</Link>
-            <p className="text-xs text-muted-foreground">{subs(c.subscribers + (s.subscriptions.includes(c.id) ? 1 : 0))}</p>
+            <p className="text-xs text-muted-foreground">{subs(c.subscribers)}</p>
           </div>
           <SubscribeButton channelId={c.id} />
         </div>
@@ -101,14 +110,14 @@ function Watch() {
           <div className="flex overflow-hidden rounded-full bg-muted">
             <button
               aria-label="Like"
-              onClick={() => setState((st) => ({ liked: toggleIn(st.liked, id), disliked: st.disliked.filter((x) => x !== id) }))}
+              onClick={() => react(1)}
               className="flex items-center gap-2 border-r border-border px-4 py-2 text-sm font-medium hover:bg-accent"
             >
-              <ThumbsUp className={cn("h-5 w-5", liked && "fill-current")} /> {compact(v.likes + (liked ? 1 : 0))}
+              <ThumbsUp className={cn("h-5 w-5", liked && "fill-current")} /> {compact(v.likes)}
             </button>
             <button
               aria-label="Dislike"
-              onClick={() => setState((st) => ({ disliked: toggleIn(st.disliked, id), liked: st.liked.filter((x) => x !== id) }))}
+              onClick={() => react(-1)}
               className="px-4 py-2 hover:bg-accent"
             >
               <ThumbsDown className={cn("h-5 w-5", disliked && "fill-current")} />
@@ -120,7 +129,7 @@ function Watch() {
           >
             <Share2 className="h-5 w-5" /> Share
           </button>
-          <button onClick={() => setSave(true)} className="flex items-center gap-2 rounded-full bg-muted px-4 py-2 text-sm font-medium hover:bg-accent">
+          <button onClick={() => req("save videos", () => setSave(true))} className="flex items-center gap-2 rounded-full bg-muted px-4 py-2 text-sm font-medium hover:bg-accent">
             <Bookmark className="h-5 w-5" /> Save
           </button>
         </div>
@@ -136,7 +145,7 @@ function Watch() {
       {theater ? (
         <>
           <div className="flex justify-center bg-overlay">
-            <Player ref={player} key={id} src={v.src} poster={v.thumbnail} theater onTheater={() => setTheater(false)} onNext={next ? () => nav({ to: "/watch/$id", params: { id: next.id } }) : undefined} />
+            <Player ref={player} key={id} src={src ?? ""} poster={v.thumbnail ?? undefined} theater onTheater={() => setTheater(false)} onNext={next ? () => nav({ to: "/watch/$id", params: { id: next.id } }) : undefined} />
           </div>
           <div className="mx-auto grid max-w-[1750px] gap-6 px-4 sm:px-6 lg:grid-cols-[1fr_400px]">
             {main}
@@ -146,7 +155,7 @@ function Watch() {
       ) : (
         <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
           <div className="min-w-0">
-            <Player ref={player} key={id} src={v.src} poster={v.thumbnail} onTheater={() => setTheater(true)} onNext={next ? () => nav({ to: "/watch/$id", params: { id: next.id } }) : undefined} />
+            <Player ref={player} key={id} src={src ?? ""} poster={v.thumbnail ?? undefined} onTheater={() => setTheater(true)} onNext={next ? () => nav({ to: "/watch/$id", params: { id: next.id } }) : undefined} />
             {main}
           </div>
           {sidebar}
