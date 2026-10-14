@@ -1,29 +1,24 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, type ReactNode } from "react";
 import { Eye, Clock, Users, Pencil, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { StudioNav } from "@/components/StudioNav";
+import { Avatar, SignInPrompt } from "@/components/common";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CATEGORIES, ME_ID, hash, type Video, type Visibility } from "@/lib/data";
+import { supabase } from "@/integrations/supabase/client";
+import { CATEGORIES, channelQuery, useAuth, useMe, type Video, type Visibility } from "@/lib/api";
 import { compact, duration, pageHead } from "@/lib/format";
-import { allVideos, getChannel, setState, useAppState } from "@/lib/store";
 
 export const Route = createFileRoute("/studio/")({
   head: () => pageHead("Studio", "Manage your videos and see channel analytics in ArinX Studio."),
   component: Studio,
 });
 
-function series(seed: string, base: number) {
-  let h = hash(seed);
-  return Array.from({ length: 28 }, (_, i) => {
-    h = (h * 1103515245 + 12345) >>> 0;
-    return Math.round(base * (0.6 + (h % 1000) / 1000) * (1 + i / 40));
-  });
-}
-
-function Stat({ icon, label, value, data }: { icon: React.ReactNode; label: string; value: string; data: number[] }) {
-  const max = Math.max(...data);
-  const pts = data.map((d, i) => `${(i / (data.length - 1)) * 100},${40 - (d / max) * 36}`).join(" ");
+function Stat({ icon, label, value, data, note }: { icon: ReactNode; label: string; value: string; data: number[]; note: string }) {
+  const d = data.length > 1 ? data : [0, ...data, ...(data.length ? [] : [0])];
+  const max = Math.max(1, ...d);
+  const pts = d.map((x, i) => `${(i / (d.length - 1)) * 100},${40 - (x / max) * 36}`).join(" ");
   return (
     <div className="rounded-2xl border border-border bg-card p-5">
       <p className="flex items-center gap-2 text-sm text-muted-foreground">{icon} {label}</p>
@@ -32,21 +27,24 @@ function Stat({ icon, label, value, data }: { icon: React.ReactNode; label: stri
         <polyline points={`0,40 ${pts} 100,40`} className="fill-primary/15" />
         <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
       </svg>
-      <p className="text-xs text-muted-foreground">Last 28 days</p>
+      <p className="text-xs text-muted-foreground">{note}</p>
     </div>
   );
 }
 
-function EditDialog({ v, onClose }: { v: Video; onClose: () => void }) {
+const cumulative = (xs: number[]) => { let t = 0; return xs.map((x) => (t += x)); };
+
+function EditDialog({ v, onClose, onSaved }: { v: Video; onClose: () => void; onSaved: () => void }) {
   const [f, setF] = useState({ title: v.title, description: v.description, category: v.category, visibility: v.visibility, tags: v.tags.join(", ") });
-  const save = () => {
-    const patch = { ...f, tags: f.tags.split(",").map((t) => t.trim()).filter(Boolean) };
-    setState((st) =>
-      st.uploads.some((u) => u.id === v.id)
-        ? { uploads: st.uploads.map((u) => (u.id === v.id ? { ...u, ...patch } : u)) }
-        : { edits: { ...st.edits, [v.id]: { ...st.edits[v.id], ...patch } } },
-    );
+  const save = async () => {
+    if (!f.title.trim()) return toast.error("Title is required");
+    const { error } = await supabase.from("videos").update({
+      title: f.title.trim(), description: f.description, category: f.category, visibility: f.visibility,
+      tags: f.tags.split(",").map((t) => t.trim()).filter(Boolean),
+    }).eq("id", v.id);
+    if (error) return toast.error(error.message);
     toast("Changes saved");
+    onSaved();
     onClose();
   };
   const field = "w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary";
@@ -79,33 +77,41 @@ function EditDialog({ v, onClose }: { v: Video; onClose: () => void }) {
 }
 
 function Studio() {
-  const s = useAppState();
-  const me = getChannel(s, ME_ID)!;
-  const vids = allVideos(s).filter((v) => v.channelId === ME_ID).sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt));
+  const { uid, ready } = useAuth();
+  const { data: me } = useMe();
+  const qc = useQueryClient();
+  const { data } = useQuery({ ...channelQuery(me?.handle ?? ""), enabled: !!me });
   const [editing, setEditing] = useState<Video | null>(null);
+  if (ready && !uid) return <SignInPrompt title="ArinX Studio" text="Sign in to upload and manage your videos." />;
+  if (!me) return <div className="p-6"><div className="h-40 animate-pulse rounded-2xl bg-muted" /></div>;
+  const vids = data?.videos ?? [];
+  const chrono = [...vids].reverse();
   const totalViews = vids.reduce((a, v) => a + v.views, 0);
-  const watchHours = Math.round(vids.reduce((a, v) => a + v.views * v.duration * 0.42, 0) / 3600);
-  const vSeries = series("views", totalViews / 400);
-  const views28 = vSeries.reduce((a, b) => a + b, 0);
+  const watchHours = Math.round(vids.reduce((a, v) => a + v.views * v.duration * 0.5, 0) / 3600);
+  const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: ["channel"] }), qc.invalidateQueries({ queryKey: ["videos"] }), qc.invalidateQueries({ queryKey: ["video"] })]);
 
-  const setVis = (v: Video, visibility: Visibility) =>
-    setState((st) =>
-      st.uploads.some((u) => u.id === v.id)
-        ? { uploads: st.uploads.map((u) => (u.id === v.id ? { ...u, visibility } : u)) }
-        : { edits: { ...st.edits, [v.id]: { ...st.edits[v.id], visibility } } },
-    );
-  const del = (v: Video) => {
+  const setVis = async (v: Video, visibility: Visibility) => {
+    const { error } = await supabase.from("videos").update({ visibility }).eq("id", v.id);
+    if (error) return toast.error(error.message);
+    toast(`Visibility set to ${visibility}`);
+    refresh();
+  };
+  const del = async (v: Video) => {
     if (!confirm(`Delete "${v.title}" permanently?`)) return;
-    setState((st) => ({ uploads: st.uploads.filter((u) => u.id !== v.id), deleted: [...st.deleted, v.id] }));
+    const { error } = await supabase.from("videos").delete().eq("id", v.id);
+    if (error) return toast.error(error.message);
+    await supabase.storage.from("videos").remove([v.videoPath]);
+    if (v.thumbnailPath && !v.thumbnailPath.startsWith("http")) await supabase.storage.from("thumbnails").remove([v.thumbnailPath]);
     toast("Video deleted");
+    refresh();
   };
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 pb-12">
       <StudioNav />
-      {editing && <EditDialog v={editing} onClose={() => setEditing(null)} />}
+      {editing && <EditDialog v={editing} onClose={() => setEditing(null)} onSaved={refresh} />}
       <div className="mb-8 flex items-center gap-4">
-        <img src={me.avatar} alt="" className="h-14 w-14 rounded-full object-cover" />
+        <Avatar ch={me} className="h-14 w-14 text-xl" />
         <div className="flex-1">
           <h1 className="font-display text-2xl font-bold">Channel dashboard</h1>
           <p className="text-sm text-muted-foreground">{me.name} · @{me.handle}</p>
@@ -113,9 +119,9 @@ function Studio() {
         <Link to="/studio/upload" className="flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"><Upload className="h-4 w-4" /> Upload</Link>
       </div>
       <div className="grid gap-4 md:grid-cols-3">
-        <Stat icon={<Eye className="h-4 w-4" />} label="Views" value={compact(views28)} data={vSeries} />
-        <Stat icon={<Clock className="h-4 w-4" />} label="Watch time (hours)" value={compact(watchHours)} data={series("wt", watchHours / 28)} />
-        <Stat icon={<Users className="h-4 w-4" />} label="Subscribers" value={compact(me.subscribers)} data={series("subs", 40)} />
+        <Stat icon={<Eye className="h-4 w-4" />} label="Total views" value={compact(totalViews)} data={cumulative(chrono.map((v) => v.views))} note="Across your uploads, oldest to newest" />
+        <Stat icon={<Clock className="h-4 w-4" />} label="Watch time (est. hours)" value={compact(watchHours)} data={cumulative(chrono.map((v) => v.views * v.duration * 0.5 / 3600))} note="Estimated from views and length" />
+        <Stat icon={<Users className="h-4 w-4" />} label="Subscribers" value={compact(me.subscribers)} data={chrono.map((v) => v.likes)} note={`${vids.reduce((a, v) => a + v.likes, 0).toLocaleString()} total likes`} />
       </div>
 
       <h2 className="mb-3 mt-10 font-display text-xl font-semibold">Channel content</h2>
@@ -130,7 +136,7 @@ function Studio() {
                 <td className="p-3">
                   <div className="flex items-center gap-3">
                     <Link to="/watch/$id" params={{ id: v.id }} className="relative w-28 shrink-0">
-                      <img src={v.thumbnail} alt="" className="aspect-video w-full rounded-md object-cover" />
+                      {v.thumbnail ? <img src={v.thumbnail} alt="" className="aspect-video w-full rounded-md object-cover" /> : <div className="aspect-video w-full rounded-md bg-muted" />}
                       <span className="absolute bottom-1 right-1 rounded bg-overlay/80 px-1 text-[10px] text-overlay-foreground">{duration(v.duration)}</span>
                     </Link>
                     <div className="min-w-0">
