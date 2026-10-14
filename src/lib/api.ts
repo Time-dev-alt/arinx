@@ -319,3 +319,14 @@ export function recommend(vids: Video[], u: UserData, exclude?: string): Video[]
     Math.log10(v.views + 10) + (catScore[v.category] ?? 0) * 0.8 + (u.subscriptions.includes(v.channelId) ? 1.5 : 0) - (watched.has(v.id) ? 2 : 0) - Math.min(ageDays(v), 60) / 30;
   return [...list].sort((a, b) => score(b) - score(a));
 }
+
+// ---------- uploads ----------
+export async function dataUrlToBlob(d: string) {
+  return (await fetch(d)).blob();
+}
+export async function uploadFile(bucket: "videos" | "thumbnails" | "channel-art", uid: string, file: Blob, ext: string) {
+  const path = `${uid}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from(bucket).upload(path, file, { contentType: file.type || undefined, upsert: false });
+  if (error) throw error;
+  return path;
+}
