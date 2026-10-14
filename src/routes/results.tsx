@@ -1,10 +1,11 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 import { Empty, ShortCard, VideoRow } from "@/components/VideoCard";
-import { SubscribeButton } from "@/components/common";
+import { Avatar, Loading, SubscribeButton } from "@/components/common";
 import { compact, pageHead } from "@/lib/format";
-import { getChannels, publicVideos, useAppState } from "@/lib/store";
+import { publicVideosQuery, searchChannelsQuery } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 type Search = { q?: string; type?: string; date?: string; duration?: string };
@@ -31,16 +32,15 @@ function Results() {
   const search = Route.useSearch();
   const { q = "", type = "all", date = "any", duration = "any" } = search;
   const nav = useNavigate();
-  const s = useAppState();
   const [showF, setShowF] = useState(false);
+  const { data: all, isLoading } = useQuery(publicVideosQuery());
+  const { data: chResults = [] } = useQuery(searchChannelsQuery(q));
+  if (isLoading || !all) return <Loading />;
   const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
   const matches = (txt: string) => terms.every((t) => txt.toLowerCase().includes(t));
 
-  const channels = type === "all" || type === "channel" ? getChannels(s).filter((c) => matches(`${c.name} ${c.handle} ${c.bio}`)) : [];
-  let vids = type === "channel" ? [] : publicVideos(s).filter((v) => {
-    const ch = getChannels(s).find((c) => c.id === v.channelId);
-    return matches(`${v.title} ${v.tags.join(" ")} ${v.category} ${ch?.name ?? ""}`);
-  });
+  const channels = type === "all" || type === "channel" ? chResults : [];
+  let vids = type === "channel" ? [] : all.filter((v) => matches(`${v.title} ${v.tags.join(" ")} ${v.category} ${v.channel.name} ${v.description}`));
   if (type === "video") vids = vids.filter((v) => !v.isShort);
   if (type === "short") vids = vids.filter((v) => v.isShort);
   if (DAYS[date]) vids = vids.filter((v) => Date.now() - +new Date(v.publishedAt) <= DAYS[date] * 86400000);
@@ -79,7 +79,7 @@ function Results() {
         {channels.map((c) => (
           <div key={c.id} className="flex items-center gap-6 border-b border-border py-4">
             <Link to="/channel/$handle" params={{ handle: c.handle }} className="flex w-full max-w-[360px] justify-center sm:w-[45%]">
-              <img src={c.avatar} alt="" className="h-24 w-24 rounded-full object-cover sm:h-32 sm:w-32" />
+              <Avatar ch={c} className="h-24 w-24 text-4xl sm:h-32 sm:w-32" />
             </Link>
             <div className="min-w-0 flex-1">
               <Link to="/channel/$handle" params={{ handle: c.handle }} className="text-lg font-semibold">{c.name}</Link>

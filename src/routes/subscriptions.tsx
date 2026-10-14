@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Grid } from "@/components/common";
+import { useQuery } from "@tanstack/react-query";
+import { Avatar, Grid, Loading, SignInPrompt } from "@/components/common";
 import { Empty } from "@/components/VideoCard";
 import { pageHead } from "@/lib/format";
-import { getChannels, publicVideos, useAppState } from "@/lib/store";
+import { channelsByIdsQuery, publicVideosQuery, useAuth, useUserData } from "@/lib/api";
 
 export const Route = createFileRoute("/subscriptions")({
   head: () => pageHead("Subscriptions", "The latest uploads from channels you subscribe to on ArinX."),
@@ -10,17 +11,19 @@ export const Route = createFileRoute("/subscriptions")({
 });
 
 function Subs() {
-  const s = useAppState();
-  const chs = getChannels(s).filter((c) => s.subscriptions.includes(c.id));
-  const vids = publicVideos(s)
-    .filter((v) => !v.isShort && s.subscriptions.includes(v.channelId))
-    .sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt));
+  const { uid, ready } = useAuth();
+  const u = useUserData();
+  const { data: chs = [] } = useQuery(channelsByIdsQuery(u.subscriptions));
+  const { data: all, isLoading } = useQuery(publicVideosQuery());
+  if (ready && !uid) return <SignInPrompt title="Don't miss new videos" text="Sign in to see updates from your favorite channels." />;
+  if (isLoading || !all) return <Loading />;
+  const vids = all.filter((v) => !v.isShort && u.subscriptions.includes(v.channelId));
   return (
     <div className="px-4 py-4 pb-12 sm:px-6">
       <div className="no-scrollbar mb-6 flex gap-6 overflow-x-auto">
         {chs.map((c) => (
           <Link key={c.id} to="/channel/$handle" params={{ handle: c.handle }} className="flex w-20 shrink-0 flex-col items-center gap-2 text-center text-xs">
-            <img src={c.avatar} alt="" className="h-16 w-16 rounded-full object-cover" />
+            <Avatar ch={c} className="h-16 w-16 text-xl" />
             <span className="line-clamp-1">{c.name}</span>
           </Link>
         ))}
