@@ -3,9 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import { ImagePlus, UploadCloud, Check } from "lucide-react";
 import { toast } from "sonner";
 import { StudioNav, readAsDataURL } from "@/components/StudioNav";
-import { CATEGORIES, ME_ID, type Visibility } from "@/lib/data";
+import { useQueryClient } from "@tanstack/react-query";
+import { SignInPrompt } from "@/components/common";
+import { supabase } from "@/integrations/supabase/client";
+import { CATEGORIES, dataUrlToBlob, uploadFile, useAuth, type Visibility } from "@/lib/api";
 import { duration as fmt, pageHead } from "@/lib/format";
-import { putFile, setState, uid } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/studio/upload")({
@@ -35,6 +37,9 @@ async function grabFrames(url: string): Promise<{ frames: string[]; duration: nu
 
 function UploadPage() {
   const nav = useNavigate();
+  const { uid, ready } = useAuth();
+  const qc = useQueryClient();
+  const [stage, setStage] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState("");
   const [frames, setFrames] = useState<string[]>([]);
@@ -66,43 +71,40 @@ function UploadPage() {
   };
 
   const publish = async () => {
+    if (!uid) return;
     if (!file || !f.title.trim()) return toast.error("Add a video and a title");
     setBusy(true);
     try {
-      const id = "u" + uid();
-      await putFile(id, file);
-      setState((st) => ({
-        uploads: [
-          {
-            id,
-            title: f.title.trim(),
-            description: f.description,
-            channelId: ME_ID,
-            src: "idb:" + id,
-            thumbnail: thumb || frames[0] || "https://picsum.photos/seed/" + id + "/640/360",
-            duration: Math.round(dur),
-            views: 0,
-            likes: 0,
-            publishedAt: new Date().toISOString(),
-            category: f.category,
-            tags: f.tags.split(",").map((t) => t.trim()).filter(Boolean),
-            visibility: f.visibility,
-            isShort: f.isShort,
-          },
-          ...st.uploads,
-        ],
-      }));
+      setStage("Uploading video…");
+      const ext = (file.name.split(".").pop() || "mp4").toLowerCase();
+      const videoPath = await uploadFile("videos", uid, file, ext);
+      let thumbPath: string | null = null;
+      const t = thumb || frames[0];
+      if (t) {
+        setStage("Uploading thumbnail…");
+        thumbPath = await uploadFile("thumbnails", uid, await dataUrlToBlob(t), "jpg");
+      }
+      setStage("Publishing…");
+      const { error } = await supabase.from("videos").insert({
+        owner_id: uid, title: f.title.trim(), description: f.description, category: f.category,
+        tags: f.tags.split(",").map((x) => x.trim()).filter(Boolean), visibility: f.visibility,
+        is_short: f.isShort, video_path: videoPath, thumbnail_url: thumbPath, duration: Math.round(dur),
+      });
+      if (error) throw error;
+      await Promise.all([qc.invalidateQueries({ queryKey: ["videos"] }), qc.invalidateQueries({ queryKey: ["channel"] })]);
       toast.success("Video published");
       nav({ to: "/studio" });
-    } catch {
-      toast.error("Upload failed — the file may be too large for this browser");
+    } catch (e) {
+      toast.error(`Upload failed: ${e instanceof Error ? e.message : "please try again"}`);
     } finally {
       setBusy(false);
+      setStage("");
     }
   };
 
   const field = "mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary";
 
+  if (ready && !uid) return <SignInPrompt title="Upload videos" text="Sign in to upload videos to your channel." />;
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 pb-12">
       <StudioNav />
@@ -175,7 +177,7 @@ function UploadPage() {
             </div>
             <div className="flex gap-2">
               <button onClick={() => { setFile(null); setFrames([]); setThumb(""); }} className="flex-1 rounded-full bg-muted py-2 text-sm font-medium hover:bg-accent">Discard</button>
-              <button disabled={busy} onClick={publish} className="flex-1 rounded-full bg-primary py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">{busy ? "Publishing…" : "Publish"}</button>
+              <button disabled={busy} onClick={publish} className="flex-1 rounded-full bg-primary py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">{busy ? stage || "Publishing…" : "Publish"}</button>
             </div>
           </aside>
         </div>
