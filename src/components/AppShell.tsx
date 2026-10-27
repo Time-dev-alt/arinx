@@ -10,6 +10,7 @@ import { channelsByIdsQuery, publicVideosQuery, useAuth, useMe, useUserData } fr
 import { setPrefs, usePrefs } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { Avatar } from "./common";
+import { useIsAdmin } from "@/lib/settings";
 
 export function Logo() {
   return (
@@ -157,6 +158,7 @@ function Sidebar({ mini, path }: { mini: boolean; path: string }) {
 function AccountButton() {
   const { uid, ready } = useAuth();
   const { data: me } = useMe();
+  const { data: isAdmin } = useIsAdmin();
   const [open, setOpen] = useState(false);
   const nav = useNavigate();
   if (!ready) return <span className="ml-1 h-8 w-8" />;
@@ -170,6 +172,7 @@ function AccountButton() {
           <div className="px-4 pb-2"><p className="font-semibold">{me.name}</p><p className="text-sm text-muted-foreground">@{me.handle}</p></div>
           <Link to="/channel/$handle" params={{ handle: me.handle }} onClick={() => setOpen(false)} className="block px-4 py-2 text-sm hover:bg-accent">Your channel</Link>
           <Link to="/studio" onClick={() => setOpen(false)} className="block px-4 py-2 text-sm hover:bg-accent">ArinX Studio</Link>
+          {isAdmin && <Link to="/admin" onClick={() => setOpen(false)} className="block px-4 py-2 text-sm font-medium text-primary hover:bg-accent">Owner admin panel</Link>}
           <button onClick={async () => { setOpen(false); await supabase.auth.signOut(); nav({ to: "/" }); }} className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-accent"><LogOut className="h-4 w-4" /> Sign out</button>
         </div>
       )}
