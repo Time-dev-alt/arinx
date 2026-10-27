@@ -12,6 +12,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { actions, publicVideosQuery, recommend, useAuth, useRequireAuth, useUserData, videoQuery, videoSrcQuery } from "@/lib/api";
 import { Avatar } from "@/components/common";
 import { cn } from "@/lib/utils";
+import { AdSlot } from "@/components/AdSlot";
 
 export const Route = createFileRoute("/watch/$id")({
   head: () => pageHead("Watch", "Watch videos on ArinX."),
@@ -89,6 +90,7 @@ function Watch() {
 
   const sidebar = (
     <aside className="space-y-3">
+      <AdSlot slot="adsterra_sidebar" className="rounded-xl border border-border p-2" />
       <Pills items={["All", `From ${c.name}`, v.category]} value={filter} onChange={setFilter} />
       {related.slice(0, 20).map((r) => <VideoRow key={r.id} v={r} compact />)}
     </aside>
