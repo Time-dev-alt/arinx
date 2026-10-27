@@ -22,6 +22,13 @@
       "when": 1793111643091,
       "tag": "0002_admin_roles_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793111659077,
+      "tag": "0003_claim_owner",
+      "breakpoints": true
     }
   ]
 }
