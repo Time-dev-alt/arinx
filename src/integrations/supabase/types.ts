@@ -345,6 +345,7 @@ export type Database = {
           is_short: boolean
           likes: number
           owner_id: string
+          stream_uid: string | null
           tags: string[]
           thumbnail_url: string | null
           title: string
@@ -362,10 +363,11 @@ export type Database = {
           is_short?: boolean
           likes?: number
           owner_id: string
+          stream_uid?: string | null
           tags?: string[]
           thumbnail_url?: string | null
           title: string
-          video_path: string
+          video_path?: string
           video_url?: string | null
           views?: number
           visibility?: string
@@ -379,6 +381,7 @@ export type Database = {
           is_short?: boolean
           likes?: number
           owner_id?: string
+          stream_uid?: string | null
           tags?: string[]
           thumbnail_url?: string | null
           title?: string
