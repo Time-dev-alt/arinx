@@ -13,6 +13,7 @@ import { actions, publicVideosQuery, recommend, useAuth, useRequireAuth, useUser
 import { Avatar } from "@/components/common";
 import { cn } from "@/lib/utils";
 import { AdSlot } from "@/components/AdSlot";
+import { PrerollAd } from "@/components/PrerollAd";
 
 export const Route = createFileRoute("/watch/$id")({
   head: () => pageHead("Watch", "Watch videos on ArinX."),

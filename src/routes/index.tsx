@@ -6,6 +6,7 @@ import { CATEGORIES, publicVideosQuery, recommend, useUserData } from "@/lib/api
 import { pageHead } from "@/lib/format";
 import { Empty, ShortCard } from "@/components/VideoCard";
 import { Grid, Loading, Pills } from "@/components/common";
+import { AdSlot } from "@/components/AdSlot";
 
 export const Route = createFileRoute("/")({
   head: () => pageHead("Home", "Personalized video recommendations, trending picks and Shorts on ArinX."),
