@@ -7,7 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { SignInPrompt } from "@/components/common";
 import { supabase } from "@/integrations/supabase/client";
 import { CATEGORIES, dataUrlToBlob, uploadFile, useAuth, type Visibility } from "@/lib/api";
-import { compressVideo } from "@/lib/compress";
+import { compressVideo, type CompressPreset } from "@/lib/compress";
 import { useSiteSettings } from "@/lib/settings";
 import { duration as fmt, pageHead } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -82,7 +82,7 @@ function UploadPage() {
       let ext = (file.name.split(".").pop() || "mp4").toLowerCase();
       if (settings?.compression_enabled) {
         const r = await compressVideo(file, {
-          preset: settings.compression_preset as import("@/lib/compress").CompressPreset,
+          preset: settings.compression_preset as CompressPreset,
           watermarkEnabled: settings.watermark_enabled,
           watermarkText: settings.watermark_text,
           watermarkPosition: settings.watermark_position,
