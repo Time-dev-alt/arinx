@@ -7,6 +7,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { SignInPrompt } from "@/components/common";
 import { supabase } from "@/integrations/supabase/client";
 import { CATEGORIES, dataUrlToBlob, uploadFile, useAuth, type Visibility } from "@/lib/api";
+import { compressVideo } from "@/lib/compress";
+import { useSiteSettings } from "@/lib/settings";
 import { duration as fmt, pageHead } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -38,6 +40,7 @@ async function grabFrames(url: string): Promise<{ frames: string[]; duration: nu
 function UploadPage() {
   const nav = useNavigate();
   const { uid, ready } = useAuth();
+  const { data: settings } = useSiteSettings();
   const qc = useQueryClient();
   const [stage, setStage] = useState("");
   const [file, setFile] = useState<File | null>(null);
