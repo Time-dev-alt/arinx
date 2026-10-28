@@ -82,7 +82,7 @@ function UploadPage() {
       let ext = (file.name.split(".").pop() || "mp4").toLowerCase();
       if (settings?.compression_enabled) {
         const r = await compressVideo(file, {
-          preset: settings.compression_preset,
+          preset: settings.compression_preset as import("@/lib/compress").CompressPreset,
           watermarkEnabled: settings.watermark_enabled,
           watermarkText: settings.watermark_text,
           watermarkPosition: settings.watermark_position,
