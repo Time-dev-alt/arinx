@@ -34,6 +34,7 @@ function Index() {
         <Pills items={["All", ...CATEGORIES, "Recently uploaded"]} value={cat} onChange={setCat} />
       </div>
       <Grid vids={vids.slice(0, 8)} />
+      <AdSlot slot="adsterra_feed" className="my-6" />
       {shorts.length > 0 && (
         <section className="my-8 border-y border-border py-6">
           <h2 className="mb-4 flex items-center gap-2 font-display text-xl font-semibold"><Zap className="h-6 w-6 text-primary" /> Shorts</h2>

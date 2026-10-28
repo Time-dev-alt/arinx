@@ -64,6 +64,7 @@ function Watch() {
   const nav = useNavigate();
   const player = useRef<PlayerHandle>(null);
   const [theater, setTheater] = useState(false);
+  const [adDone, setAdDone] = useState(false);
   const [save, setSave] = useState(false);
   const [filter, setFilter] = useState("All");
 
