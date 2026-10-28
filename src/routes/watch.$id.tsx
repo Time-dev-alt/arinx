@@ -154,6 +154,7 @@ function Watch() {
         </div>
       </div>
       <Description text={v.description} tags={v.tags} views={v.views} at={v.publishedAt} onSeek={(t) => player.current?.seek(t)} />
+      <AdSlot slot="adsterra_native" className="mt-4 rounded-xl border border-border p-3" />
       <Comments videoId={id} />
     </div>
   );
@@ -164,7 +165,7 @@ function Watch() {
       {theater ? (
         <>
           <div className="flex justify-center bg-overlay">
-            <Player ref={player} key={id} src={src ?? ""} poster={v.thumbnail ?? undefined} theater onTheater={() => setTheater(false)} onNext={next ? () => nav({ to: "/watch/$id", params: { id: next.id } }) : undefined} />
+            {playerEl}
           </div>
           <div className="mx-auto grid max-w-[1750px] gap-6 px-4 sm:px-6 lg:grid-cols-[1fr_400px]">
             {main}
@@ -174,7 +175,7 @@ function Watch() {
       ) : (
         <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
           <div className="min-w-0">
-            <Player ref={player} key={id} src={src ?? ""} poster={v.thumbnail ?? undefined} onTheater={() => setTheater(true)} onNext={next ? () => nav({ to: "/watch/$id", params: { id: next.id } }) : undefined} />
+            {playerEl}
             {main}
           </div>
           {sidebar}
