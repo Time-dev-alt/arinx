@@ -91,6 +91,20 @@ function Watch() {
   else related = [...related.filter((x) => x.category === v.category), ...related.filter((x) => x.category !== v.category)];
   const next = related[0];
 
+  const playerEl = adDone ? (
+    <Player
+      ref={player}
+      key={id}
+      src={src ?? ""}
+      poster={v.thumbnail ?? undefined}
+      theater={theater}
+      onTheater={() => setTheater((t) => !t)}
+      onNext={next ? () => nav({ to: "/watch/$id", params: { id: next.id } }) : undefined}
+    />
+  ) : (
+    <PrerollAd onDone={() => setAdDone(true)} />
+  );
+
   const sidebar = (
     <aside className="space-y-3">
       <AdSlot slot="adsterra_sidebar" className="rounded-xl border border-border p-2" />
