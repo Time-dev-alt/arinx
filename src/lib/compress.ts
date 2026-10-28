@@ -139,10 +139,12 @@ export async function compressVideo(file: File, opts: CompressOptions): Promise<
     if (opts.watermarkEnabled) await ffmpeg.deleteFile("wm.png").catch(() => {});
 
     const blob = new Blob([buf.buffer], { type: "video/mp4" });
-    if (blob.size >= file.size) {
-      // Compression made it bigger — keep the original.
+    if (blob.size >= file.size && !opts.watermarkEnabled) {
+      // No watermark needed and compression made it bigger — keep the original.
       return { blob: file, originalSize: file.size, compressedSize: file.size, fingerprint, compressed: false };
     }
+    // When watermarking is on, always keep the re-encoded file: the watermark must be baked in
+    // even if the source was already smaller than our target.
     return { blob, originalSize: file.size, compressedSize: blob.size, fingerprint, compressed: true };
   } catch (e) {
     console.warn("[compress] falling back to original file:", e);
