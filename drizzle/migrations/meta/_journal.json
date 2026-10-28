@@ -43,6 +43,13 @@
       "when": 1793111985272,
       "tag": "0005_video_stream_uid",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793150318393,
+      "tag": "0006_add_watermark_settings_deprecate_stream",
+      "breakpoints": true
     }
   ]
 }
