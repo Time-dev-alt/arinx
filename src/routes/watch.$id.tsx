@@ -69,6 +69,7 @@ function Watch() {
   const [filter, setFilter] = useState("All");
 
   useEffect(() => {
+    setAdDone(false);
   if (!v) return;
     void actions.recordWatch(uid, id).then(() => qc.invalidateQueries({ queryKey: ["me"] }));
   }, [id, !!v, uid]);
