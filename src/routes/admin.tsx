@@ -15,7 +15,7 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-const TABS = ["Monetization", "Video protection", "Compression", "Content"] as const;
+const TABS = ["Monetization", "Watermark", "Compression", "Content"] as const;
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
@@ -92,11 +92,23 @@ function AdminPage() {
         </Section>
       </>)}
 
-      {tab === "Video protection" && (
-        <Section title="Cloudflare Stream" hint="Find your customer code in Cloudflare → Stream (it appears in your video links as customer-XXXX.cloudflarestream.com). Your private API token will be requested separately and stored securely.">
-          <input className={input} placeholder="Customer code, e.g. abc123xyz" value={s.cf_customer_code} onChange={(e) => up("cf_customer_code", e.target.value)} />
-          <Toggle label="Require signed (expiring) playback links" on={s.cf_signed_urls} set={(v) => up("cf_signed_urls", v)} />
-          <Toggle label="Block right-click and download options on the player" on={s.protect_player} set={(v) => up("protect_player", v)} />
+      {tab === "Watermark" && (
+        <Section title="Permanent watermarks" hint="Burned into every frame during upload — they survive downloads, re-uploads and screen recordings, making copyright claims actionable.">
+          <Toggle label="Watermark all new uploads" on={s.watermark_enabled} set={(v) => up("watermark_enabled", v)} />
+          <label className="block space-y-1 text-sm"><span className="font-medium">Watermark text</span>
+            <input className={input} maxLength={40} value={s.watermark_text} onChange={(e) => up("watermark_text", e.target.value)} placeholder="ArinX" />
+          </label>
+          <div className="space-y-1 text-sm">
+            <span className="font-medium">Position</span>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {(["top-left", "top-right", "bottom-left", "bottom-right"] as const).map((p) => (
+                <button key={p} onClick={() => up("watermark_position", p)} className={cn("rounded-lg border px-2 py-1.5 capitalize", s.watermark_position === p ? "border-primary bg-primary/10" : "border-border")}>
+                  {p.replace("-", " ")}
+                </button>
+              ))}
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">Every upload also gets an invisible fingerprint ID embedded in the file, so copies can be traced back to ArinX.</p>
         </Section>
       )}
 

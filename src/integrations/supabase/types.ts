@@ -211,6 +211,9 @@ export type Database = {
           preroll_video_url: string
           protect_player: boolean
           updated_at: string
+          watermark_enabled: boolean
+          watermark_position: string
+          watermark_text: string
         }
         Insert: {
           ads_enabled?: boolean
@@ -228,6 +231,9 @@ export type Database = {
           preroll_video_url?: string
           protect_player?: boolean
           updated_at?: string
+          watermark_enabled?: boolean
+          watermark_position?: string
+          watermark_text?: string
         }
         Update: {
           ads_enabled?: boolean
@@ -245,6 +251,9 @@ export type Database = {
           preroll_video_url?: string
           protect_player?: boolean
           updated_at?: string
+          watermark_enabled?: boolean
+          watermark_position?: string
+          watermark_text?: string
         }
         Relationships: []
       }

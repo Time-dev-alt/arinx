@@ -13,6 +13,7 @@ import { actions, publicVideosQuery, recommend, useAuth, useRequireAuth, useUser
 import { Avatar } from "@/components/common";
 import { cn } from "@/lib/utils";
 import { AdSlot } from "@/components/AdSlot";
+import { PrerollAd } from "@/components/PrerollAd";
 
 export const Route = createFileRoute("/watch/$id")({
   head: () => pageHead("Watch", "Watch videos on ArinX."),
@@ -63,10 +64,12 @@ function Watch() {
   const nav = useNavigate();
   const player = useRef<PlayerHandle>(null);
   const [theater, setTheater] = useState(false);
+  const [adDone, setAdDone] = useState(false);
   const [save, setSave] = useState(false);
   const [filter, setFilter] = useState("All");
 
   useEffect(() => {
+    setAdDone(false);
   if (!v) return;
     void actions.recordWatch(uid, id).then(() => qc.invalidateQueries({ queryKey: ["me"] }));
   }, [id, !!v, uid]);
@@ -87,6 +90,20 @@ function Watch() {
   else if (filter === v.category) related = related.filter((x) => x.category === v.category);
   else related = [...related.filter((x) => x.category === v.category), ...related.filter((x) => x.category !== v.category)];
   const next = related[0];
+
+  const playerEl = adDone ? (
+    <Player
+      ref={player}
+      key={id}
+      src={src ?? ""}
+      poster={v.thumbnail ?? undefined}
+      theater={theater}
+      onTheater={() => setTheater((t) => !t)}
+      onNext={next ? () => nav({ to: "/watch/$id", params: { id: next.id } }) : undefined}
+    />
+  ) : (
+    <PrerollAd onDone={() => setAdDone(true)} />
+  );
 
   const sidebar = (
     <aside className="space-y-3">
@@ -137,6 +154,7 @@ function Watch() {
         </div>
       </div>
       <Description text={v.description} tags={v.tags} views={v.views} at={v.publishedAt} onSeek={(t) => player.current?.seek(t)} />
+      <AdSlot slot="adsterra_native" className="mt-4 rounded-xl border border-border p-3" />
       <Comments videoId={id} />
     </div>
   );
@@ -147,7 +165,7 @@ function Watch() {
       {theater ? (
         <>
           <div className="flex justify-center bg-overlay">
-            <Player ref={player} key={id} src={src ?? ""} poster={v.thumbnail ?? undefined} theater onTheater={() => setTheater(false)} onNext={next ? () => nav({ to: "/watch/$id", params: { id: next.id } }) : undefined} />
+            {playerEl}
           </div>
           <div className="mx-auto grid max-w-[1750px] gap-6 px-4 sm:px-6 lg:grid-cols-[1fr_400px]">
             {main}
@@ -157,7 +175,7 @@ function Watch() {
       ) : (
         <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
           <div className="min-w-0">
-            <Player ref={player} key={id} src={src ?? ""} poster={v.thumbnail ?? undefined} onTheater={() => setTheater(true)} onNext={next ? () => nav({ to: "/watch/$id", params: { id: next.id } }) : undefined} />
+            {playerEl}
             {main}
           </div>
           {sidebar}

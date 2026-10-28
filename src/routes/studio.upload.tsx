@@ -7,6 +7,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { SignInPrompt } from "@/components/common";
 import { supabase } from "@/integrations/supabase/client";
 import { CATEGORIES, dataUrlToBlob, uploadFile, useAuth, type Visibility } from "@/lib/api";
+import { compressVideo, type CompressPreset } from "@/lib/compress";
+import { useSiteSettings } from "@/lib/settings";
 import { duration as fmt, pageHead } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -38,6 +40,7 @@ async function grabFrames(url: string): Promise<{ frames: string[]; duration: nu
 function UploadPage() {
   const nav = useNavigate();
   const { uid, ready } = useAuth();
+  const { data: settings } = useSiteSettings();
   const qc = useQueryClient();
   const [stage, setStage] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -75,9 +78,24 @@ function UploadPage() {
     if (!file || !f.title.trim()) return toast.error("Add a video and a title");
     setBusy(true);
     try {
+      let toUpload: Blob = file;
+      let ext = (file.name.split(".").pop() || "mp4").toLowerCase();
+      if (settings?.compression_enabled) {
+        const r = await compressVideo(file, {
+          preset: settings.compression_preset as CompressPreset,
+          watermarkEnabled: settings.watermark_enabled,
+          watermarkText: settings.watermark_text,
+          watermarkPosition: settings.watermark_position,
+          onProgress: (ratio, stage) => setStage(ratio > 0 ? `${stage} ${Math.round(ratio * 100)}%` : stage),
+        });
+        if (r.compressed) {
+          toUpload = r.blob;
+          ext = "mp4";
+          toast.success(`Compressed ${(r.originalSize / 1048576).toFixed(0)} MB → ${(r.compressedSize / 1048576).toFixed(0)} MB`);
+        }
+      }
       setStage("Uploading video…");
-      const ext = (file.name.split(".").pop() || "mp4").toLowerCase();
-      const videoPath = await uploadFile("videos", uid, file, ext);
+      const videoPath = await uploadFile("videos", uid, toUpload, ext);
       let thumbPath: string | null = null;
       const t = thumb || frames[0];
       if (t) {
