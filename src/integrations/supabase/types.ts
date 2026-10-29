@@ -220,6 +220,7 @@ export type Database = {
           preroll_click_url: string
           preroll_enabled: boolean
           preroll_skip_seconds: number
+          preroll_vast_url: string
           preroll_video_url: string
           protect_player: boolean
           updated_at: string
@@ -240,6 +241,7 @@ export type Database = {
           preroll_click_url?: string
           preroll_enabled?: boolean
           preroll_skip_seconds?: number
+          preroll_vast_url?: string
           preroll_video_url?: string
           protect_player?: boolean
           updated_at?: string
@@ -260,6 +262,7 @@ export type Database = {
           preroll_click_url?: string
           preroll_enabled?: boolean
           preroll_skip_seconds?: number
+          preroll_vast_url?: string
           preroll_video_url?: string
           protect_player?: boolean
           updated_at?: string
@@ -374,6 +377,7 @@ export type Database = {
           video_url: string | null
           views: number
           visibility: string
+          watermark_fingerprint: string | null
         }
         Insert: {
           category?: string
@@ -392,6 +396,7 @@ export type Database = {
           video_url?: string | null
           views?: number
           visibility?: string
+          watermark_fingerprint?: string | null
         }
         Update: {
           category?: string
@@ -410,6 +415,7 @@ export type Database = {
           video_url?: string | null
           views?: number
           visibility?: string
+          watermark_fingerprint?: string | null
         }
         Relationships: [
           {
