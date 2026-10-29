@@ -184,7 +184,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const prefs = usePrefs();
   const path = useRouterState({ select: (r) => r.location.pathname });
   const overlayMode = path.startsWith("/watch") || path.startsWith("/shorts");
-  const bare = path.startsWith("/auth");
+  const bare = path.startsWith("/auth") || path.startsWith("/embed/");
   const [expanded, setExpanded] = useState(true);
   const [drawer, setDrawer] = useState(false);
   const [mobileSearch, setMobileSearch] = useState(false);

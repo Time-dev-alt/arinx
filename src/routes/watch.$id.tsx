@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Bookmark, Share2, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Bookmark, Download, Share2, ThumbsDown, ThumbsUp } from "lucide-react";
 import { toast } from "sonner";
 import { Player, type PlayerHandle } from "@/components/Player";
 import { Comments } from "@/components/Comments";
@@ -14,8 +14,12 @@ import { Avatar } from "@/components/common";
 import { cn } from "@/lib/utils";
 import { AdSlot } from "@/components/AdSlot";
 import { PrerollAd } from "@/components/PrerollAd";
+import { ShareDialog } from "@/components/ShareDialog";
+import { Button } from "@/components/ui/button";
+import { startSeconds } from "@/lib/watch-tools";
 
 export const Route = createFileRoute("/watch/$id")({
+  validateSearch: (search: Record<string, unknown>) => ({ t: startSeconds(search.t) }),
   head: () => pageHead("Watch", "Watch videos on ArinX."),
   component: Watch,
 });
@@ -54,6 +58,7 @@ function Description({ text, tags, views, at, onSeek }: { text: string; tags: st
 
 function Watch() {
   const { id } = Route.useParams();
+  const { t } = Route.useSearch();
   const u = useUserData();
   const { uid } = useAuth();
   const qc = useQueryClient();
@@ -67,14 +72,18 @@ function Watch() {
   const [adDone, setAdDone] = useState(false);
   const [save, setSave] = useState(false);
   const [filter, setFilter] = useState("All");
+  const [share, setShare] = useState(false);
+  const [time, setTime] = useState(0);
+  const [autoplay, setAutoplay] = useState(true);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     setAdDone(false);
+    setTime(0);
   if (!v) return;
     void actions.recordWatch(uid, id).then(() => qc.invalidateQueries({ queryKey: ["me"] }));
   }, [id, !!v, uid]);
 
-  if (isLoading) return <div className="p-6"><div className="aspect-video animate-pulse rounded-xl bg-muted" /></div>;
   if (isLoading) return <div className="p-6"><div className="aspect-video animate-pulse rounded-xl bg-muted" /></div>;
   if (!v) return <Empty title="Video unavailable" text="This video may have been removed or made private." />;
   const c = v.channel;
@@ -97,18 +106,21 @@ function Watch() {
       key={id}
       src={src ?? ""}
       poster={v.thumbnail ?? undefined}
+      startTime={t}
+      onTimeChange={setTime}
       theater={theater}
       onTheater={() => setTheater((t) => !t)}
-      onNext={next ? () => nav({ to: "/watch/$id", params: { id: next.id } }) : undefined}
+      onNext={next && autoplay ? () => nav({ to: "/watch/$id", params: { id: next.id } }) : undefined}
     />
   ) : (
-    <PrerollAd onDone={() => setAdDone(true)} />
+    <PrerollAd key={id} onDone={() => setAdDone(true)} />
   );
 
   const sidebar = (
     <aside className="space-y-3">
       <AdSlot slot="adsterra_sidebar" className="rounded-xl border border-border p-2" />
       <Pills items={["All", `From ${c.name}`, v.category]} value={filter} onChange={setFilter} />
+      <label className="flex items-center justify-between py-2 text-sm font-medium">Autoplay<input type="checkbox" checked={autoplay} onChange={e => setAutoplay(e.target.checked)} aria-label="Autoplay" className="h-4 w-4 accent-primary" /></label>
       {related.slice(0, 20).map((r) => <VideoRow key={r.id} v={r} compact />)}
     </aside>
   );
@@ -142,12 +154,23 @@ function Watch() {
               <ThumbsDown className={cn("h-5 w-5", disliked && "fill-current")} />
             </button>
           </div>
-          <button
-            onClick={() => { navigator.clipboard?.writeText(window.location.href); toast("Link copied to clipboard"); }}
-            className="flex items-center gap-2 rounded-full bg-muted px-4 py-2 text-sm font-medium hover:bg-accent"
-          >
+          <Button variant="secondary" onClick={() => setShare(true)}>
             <Share2 className="h-5 w-5" /> Share
-          </button>
+          </Button>
+          <Button variant="secondary" disabled={!src || downloading} onClick={async () => {
+            if (!src) return;
+            setDownloading(true);
+            try {
+              const response = await fetch(src);
+              if (!response.ok) throw new Error("Download failed");
+              const blob = await response.blob();
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a"); a.href = url;
+              a.download = `${v.title.replace(/[\\/:*?"<>|]/g, "_")}.${v.videoPath.split(".").pop() || "mp4"}`;
+              document.body.append(a); a.click(); a.remove(); window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+            } catch { toast.error("Couldn't download this video. Try again."); }
+            finally { setDownloading(false); }
+          }}><Download />{downloading ? "Downloading…" : "Download"}</Button>
           <button onClick={() => req("save videos", () => setSave(true))} className="flex items-center gap-2 rounded-full bg-muted px-4 py-2 text-sm font-medium hover:bg-accent">
             <Bookmark className="h-5 w-5" /> Save
           </button>
@@ -162,6 +185,7 @@ function Watch() {
   return (
     <div className={cn("mx-auto pb-12", theater ? "" : "max-w-[1750px] px-4 pt-4 sm:px-6")}>
       <SaveDialog videoId={id} open={save} onOpenChange={setSave} />
+      <ShareDialog id={id} title={v.title} time={time} open={share} onOpenChange={setShare} />
       {theater ? (
         <>
           <div className="flex justify-center bg-overlay">
