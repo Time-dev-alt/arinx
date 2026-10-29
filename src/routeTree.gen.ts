@@ -19,6 +19,7 @@ import { Route as ShortsRouteImport } from './routes/shorts'
 import { Route as SubscriptionsRouteImport } from './routes/subscriptions'
 import { Route as TrendingRouteImport } from './routes/trending'
 import { Route as ChannelHandleRouteImport } from './routes/channel.$handle'
+import { Route as EmbedIdRouteImport } from './routes/embed.$id'
 import { Route as PlaylistIdRouteImport } from './routes/playlist.$id'
 import { Route as StudioIndexRouteImport } from './routes/studio.index'
 import { Route as StudioCustomizeRouteImport } from './routes/studio.customize'
@@ -75,6 +76,11 @@ const ChannelHandleRoute = ChannelHandleRouteImport.update({
   path: '/channel/$handle',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EmbedIdRoute = EmbedIdRouteImport.update({
+  id: '/embed/$id',
+  path: '/embed/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlaylistIdRoute = PlaylistIdRouteImport.update({
   id: '/playlist/$id',
   path: '/playlist/$id',
@@ -112,6 +118,7 @@ export interface FileRoutesByFullPath {
   '/subscriptions': typeof SubscriptionsRoute
   '/trending': typeof TrendingRoute
   '/channel/$handle': typeof ChannelHandleRoute
+  '/embed/$id': typeof EmbedIdRoute
   '/playlist/$id': typeof PlaylistIdRoute
   '/studio/customize': typeof StudioCustomizeRoute
   '/studio/upload': typeof StudioUploadRoute
@@ -129,6 +136,7 @@ export interface FileRoutesByTo {
   '/subscriptions': typeof SubscriptionsRoute
   '/trending': typeof TrendingRoute
   '/channel/$handle': typeof ChannelHandleRoute
+  '/embed/$id': typeof EmbedIdRoute
   '/playlist/$id': typeof PlaylistIdRoute
   '/studio/customize': typeof StudioCustomizeRoute
   '/studio/upload': typeof StudioUploadRoute
@@ -147,6 +155,7 @@ export interface FileRoutesById {
   '/subscriptions': typeof SubscriptionsRoute
   '/trending': typeof TrendingRoute
   '/channel/$handle': typeof ChannelHandleRoute
+  '/embed/$id': typeof EmbedIdRoute
   '/playlist/$id': typeof PlaylistIdRoute
   '/studio/customize': typeof StudioCustomizeRoute
   '/studio/upload': typeof StudioUploadRoute
@@ -166,6 +175,7 @@ export interface FileRouteTypes {
     | '/subscriptions'
     | '/trending'
     | '/channel/$handle'
+    | '/embed/$id'
     | '/playlist/$id'
     | '/studio/customize'
     | '/studio/upload'
@@ -183,6 +193,7 @@ export interface FileRouteTypes {
     | '/subscriptions'
     | '/trending'
     | '/channel/$handle'
+    | '/embed/$id'
     | '/playlist/$id'
     | '/studio/customize'
     | '/studio/upload'
@@ -200,6 +211,7 @@ export interface FileRouteTypes {
     | '/subscriptions'
     | '/trending'
     | '/channel/$handle'
+    | '/embed/$id'
     | '/playlist/$id'
     | '/studio/customize'
     | '/studio/upload'
@@ -218,6 +230,7 @@ export interface RootRouteChildren {
   SubscriptionsRoute: typeof SubscriptionsRoute
   TrendingRoute: typeof TrendingRoute
   ChannelHandleRoute: typeof ChannelHandleRoute
+  EmbedIdRoute: typeof EmbedIdRoute
   PlaylistIdRoute: typeof PlaylistIdRoute
   StudioCustomizeRoute: typeof StudioCustomizeRoute
   StudioUploadRoute: typeof StudioUploadRoute
@@ -297,6 +310,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChannelHandleRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/embed/$id': {
+      id: '/embed/$id'
+      path: '/embed/$id'
+      fullPath: '/embed/$id'
+      preLoaderRoute: typeof EmbedIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/playlist/$id': {
       id: '/playlist/$id'
       path: '/playlist/$id'
@@ -346,6 +366,7 @@ const rootRouteChildren: RootRouteChildren = {
   SubscriptionsRoute: SubscriptionsRoute,
   TrendingRoute: TrendingRoute,
   ChannelHandleRoute: ChannelHandleRoute,
+  EmbedIdRoute: EmbedIdRoute,
   PlaylistIdRoute: PlaylistIdRoute,
   StudioCustomizeRoute: StudioCustomizeRoute,
   StudioUploadRoute: StudioUploadRoute,

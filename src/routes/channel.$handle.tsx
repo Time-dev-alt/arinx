@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { Pencil } from "lucide-react";
+import { Pencil, ExternalLink } from "lucide-react";
 import { ago, compact, pageHead } from "@/lib/format";
 import { channelQuery, useAuth } from "@/lib/api";
 import { Empty, ShortCard, VideoCard } from "@/components/VideoCard";
@@ -43,6 +43,7 @@ function ChannelPage() {
             <span className="font-medium text-foreground">@{c.handle}</span> · {compact(c.subscribers)} subscribers · {vids.length} videos
           </p>
           <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">{c.bio}</p>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">{c.links.map(link => <a key={link.label} href={link.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">{link.label}<ExternalLink className="h-3 w-3" /></a>)}</div>
           <div className="mt-3 flex gap-2">
             <SubscribeButton channelId={c.id} />
             {mine && (
@@ -94,7 +95,9 @@ function ChannelPage() {
         )}
         {tab === "About" && (
           <div className="grid max-w-3xl gap-8 md:grid-cols-[2fr_1fr]">
-            <div><h2 className="mb-2 font-semibold">Description</h2><p className="whitespace-pre-wrap text-sm">{c.bio || "No description yet."}</p></div>
+            <div><h2 className="mb-2 font-semibold">Description</h2><p className="whitespace-pre-wrap text-sm">{c.bio || "No description yet."}</p>
+              {!!c.links.length && <div className="mt-6 space-y-3"><h2 className="font-semibold">Links</h2>{c.links.map(link => <a key={link.label} href={link.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 break-all text-sm text-primary hover:underline">{link.label}<ExternalLink className="h-4 w-4" /></a>)}</div>}
+            </div>
             <div className="space-y-3 text-sm">
               <h2 className="font-semibold">Stats</h2>
               <p className="border-b border-border pb-3">Joined {new Date(c.joined).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</p>

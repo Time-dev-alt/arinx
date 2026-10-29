@@ -3,6 +3,7 @@ import { createContext, useContext } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { safeExternalUrl } from "@/lib/watch-tools";
 
 export type Visibility = "public" | "unlisted" | "private";
 
@@ -18,6 +19,7 @@ export interface Channel {
   bio: string;
   location: string;
   joined: string;
+  links: { label: string; url: string }[];
 }
 
 export interface Video {
@@ -67,6 +69,7 @@ const pick = (map: Record<string, string>, p: string | null) => (!p ? null : p.s
 type ProfileRow = {
   id: string; name: string; handle: string; bio: string; location: string;
   avatar_url: string | null; banner_url: string | null; subscriber_count: number; created_at: string;
+  website_url?: string | null; instagram_url?: string | null; x_url?: string | null; discord_url?: string | null;
 };
 type VideoRow = {
   id: string; owner_id: string; title: string; description: string; category: string; tags: string[];
@@ -80,6 +83,10 @@ function toChannel(p: ProfileRow, art: Record<string, string>): Channel {
     avatarPath: p.avatar_url, bannerPath: p.banner_url,
     avatar: pick(art, p.avatar_url), banner: pick(art, p.banner_url),
     subscribers: p.subscriber_count, joined: p.created_at,
+    links: ([['Website', p.website_url], ['Instagram', p.instagram_url], ['X', p.x_url], ['Discord', p.discord_url]] as const).flatMap(([label, value]) => {
+      const url = safeExternalUrl(value);
+      return url ? [{ label, url }] : [];
+    }),
   };
 }
 

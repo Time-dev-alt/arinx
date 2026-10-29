@@ -7,13 +7,15 @@ import { Avatar, SignInPrompt } from "@/components/common";
 import { supabase } from "@/integrations/supabase/client";
 import { dataUrlToBlob, uploadFile, useAuth, useMe } from "@/lib/api";
 import { pageHead } from "@/lib/format";
+import { CHANNEL_LINKS, safeExternalUrl } from "@/lib/watch-tools";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/studio/customize")({
   head: () => pageHead("Customize channel", "Edit your ArinX channel name, handle, picture, banner and bio."),
   component: Customize,
 });
 
-type Form = { name: string; handle: string; bio: string; location: string; avatar: string | null; banner: string | null };
+type Form = { name: string; handle: string; bio: string; location: string; avatar: string | null; banner: string | null; website_url: string; instagram_url: string; x_url: string; discord_url: string };
 
 function Customize() {
   const { uid, ready } = useAuth();
@@ -23,7 +25,8 @@ function Customize() {
   const [newImg, setNewImg] = useState<{ avatar?: string; banner?: string }>({});
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    if (me && !f) setF({ name: me.name, handle: me.handle, bio: me.bio, location: me.location, avatar: me.avatar, banner: me.banner });
+    if (me && !f) setF({ name: me.name, handle: me.handle, bio: me.bio, location: me.location, avatar: me.avatar, banner: me.banner,
+      ...Object.fromEntries(CHANNEL_LINKS.map(([key, label]) => [key, me.links.find(link => link.label === label)?.url ?? ""])) as Pick<Form, "website_url" | "instagram_url" | "x_url" | "discord_url"> });
   }, [me, f]);
   if (ready && !uid) return <SignInPrompt title="Customize your channel" text="Sign in to edit your channel." />;
   if (!me || !f) return <div className="p-6"><div className="h-40 animate-pulse rounded-2xl bg-muted" /></div>;
@@ -32,13 +35,16 @@ function Customize() {
   const publish = async () => {
     const handle = f.handle.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "");
     if (!f.name.trim() || !handle) return toast.error("Name and handle are required");
+    for (const [key, label] of CHANNEL_LINKS) if (f[key].trim() && !safeExternalUrl(f[key])) return toast.error(`${label} must be a valid http or https link`);
     setBusy(true);
     try {
       if (handle !== me.handle) {
         const { data } = await supabase.from("profiles").select("id").eq("handle", handle).neq("id", me.id).maybeSingle();
         if (data) { toast.error("That handle is taken"); return; }
       }
-      const patch: { name: string; handle: string; bio: string; location: string; avatar_url?: string; banner_url?: string } = { name: f.name.trim(), handle, bio: f.bio, location: f.location };
+      const patch = { name: f.name.trim(), handle, bio: f.bio, location: f.location,
+        website_url: safeExternalUrl(f.website_url), instagram_url: safeExternalUrl(f.instagram_url), x_url: safeExternalUrl(f.x_url), discord_url: safeExternalUrl(f.discord_url),
+        ...{} as { avatar_url?: string; banner_url?: string } };
       if (newImg.avatar) patch.avatar_url = await uploadFile("channel-art", me.id, await dataUrlToBlob(newImg.avatar), "jpg");
       if (newImg.banner) patch.banner_url = await uploadFile("channel-art", me.id, await dataUrlToBlob(newImg.banner), "jpg");
       const { error } = await supabase.from("profiles").update(patch).eq("id", me.id);
@@ -69,7 +75,7 @@ function Customize() {
         <h1 className="font-display text-2xl font-bold">Channel customization</h1>
         <div className="flex gap-2">
           <Link to="/channel/$handle" params={{ handle: me.handle }} className="rounded-full px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10">View channel</Link>
-          <button disabled={busy} onClick={publish} className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">{busy ? "Saving…" : "Publish"}</button>
+          <Button disabled={busy} onClick={publish}>{busy ? "Saving…" : "Publish"}</Button>
         </div>
       </div>
       <div className="space-y-8">
@@ -99,6 +105,9 @@ function Customize() {
           </label>
           <label className="block text-sm font-medium">Location<input className={field} value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} /></label>
           <label className="block text-sm font-medium">Description<textarea rows={5} className={field} value={f.bio} onChange={(e) => setF({ ...f, bio: e.target.value })} /></label>
+        </section>
+        <section className="space-y-4"><h2 className="font-semibold">Channel links</h2>
+          {CHANNEL_LINKS.map(([key, label]) => <label key={key} className="block text-sm font-medium">{label}<input type="url" className={field} placeholder="https://…" value={f[key]} onChange={e => setF({ ...f, [key]: e.target.value })} /></label>)}
         </section>
       </div>
     </div>

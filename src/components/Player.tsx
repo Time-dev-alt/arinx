@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { duration as fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 
 export interface PlayerHandle {
   seek: (t: number) => void;
@@ -22,8 +24,8 @@ const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
 export const Player = forwardRef<
   PlayerHandle,
-  { src: string; poster?: string; theater?: boolean; onTheater?: () => void; onNext?: () => void }
->(function Player({ src, poster, theater, onTheater, onNext }, ref) {
+  { src: string; poster?: string; theater?: boolean; onTheater?: () => void; onNext?: () => void; startTime?: number; onTimeChange?: (time: number) => void }
+>(function Player({ src, poster, theater, onTheater, onNext, startTime = 0, onTimeChange }, ref) {
   const url = src;
   const wrap = useRef<HTMLDivElement>(null);
   const vid = useRef<HTMLVideoElement>(null);
@@ -39,13 +41,15 @@ export const Player = forwardRef<
   const [fs, setFs] = useState(false);
   const [active, setActive] = useState(true);
   const [hover, setHover] = useState<number | null>(null);
+  const [shortcuts, setShortcuts] = useState(false);
+  const [error, setError] = useState(false);
   const hideT = useRef<number>(0);
 
   useImperativeHandle(ref, () => ({
     seek: (t) => {
       if (vid.current) {
         vid.current.currentTime = t;
-        vid.current.play();
+        void vid.current.play().catch(() => {});
       }
     },
   }));
@@ -53,7 +57,7 @@ export const Player = forwardRef<
   const toggle = () => {
     const v = vid.current;
     if (!v) return;
-    v.paused ? v.play() : v.pause();
+    v.paused ? void v.play().catch(() => {}) : v.pause();
   };
   const poke = () => {
     setActive(true);
@@ -84,7 +88,9 @@ export const Player = forwardRef<
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (e.target as HTMLElement)?.isContentEditable || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === "?") { setShortcuts(x => !x); return; }
+      if (document.querySelector('[role="dialog"]')) return;
       const v = vid.current;
       if (!v) return;
       const k = e.key.toLowerCase();
@@ -129,8 +135,9 @@ export const Player = forwardRef<
         onDoubleClick={fullscreen}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
-        onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
-        onLoadedMetadata={(e) => { setDur(e.currentTarget.duration); e.currentTarget.playbackRate = speed; }}
+        onTimeUpdate={(e) => { setTime(e.currentTarget.currentTime); onTimeChange?.(e.currentTarget.currentTime); }}
+        onLoadedMetadata={(e) => { setError(false); setDur(e.currentTarget.duration); e.currentTarget.playbackRate = speed; if (startTime > 0) e.currentTarget.currentTime = Math.min(startTime, Math.max(0, e.currentTarget.duration - 0.1)); }}
+        onError={() => setError(true)}
         onProgress={(e) => {
           const b = e.currentTarget.buffered;
           if (b.length) setBuffered(b.end(b.length - 1));
@@ -138,8 +145,10 @@ export const Player = forwardRef<
         onVolumeChange={(e) => { setVol(e.currentTarget.volume); setMuted(e.currentTarget.muted); }}
         onEnded={() => onNext?.()}
       />
+      <Dialog open={shortcuts} onOpenChange={setShortcuts}><DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-sm"><DialogTitle>Playback shortcuts</DialogTitle><DialogDescription>Keyboard controls</DialogDescription><dl className="grid grid-cols-2 gap-3 text-sm">{[["Space / K", "Play or pause"], ["J / L", "Back / forward 10s"], ["← / →", "Back / forward 5s"], ["M", "Mute"], ["F", "Full screen"], ["T", "Theater mode"], ["I", "Picture in picture"]].map(([key, label]) => <div key={key} className="contents"><dt className="font-mono text-primary">{key}</dt><dd>{label}</dd></div>)}</dl></DialogContent></Dialog>
+      {error && <div className="absolute inset-0 grid place-content-center gap-3 bg-overlay text-center text-overlay-foreground"><p>Unable to play this video</p><Button variant="secondary" onClick={() => { setError(false); vid.current?.load(); }}>Retry</Button></div>}
 
-      {!playing && (
+      {!playing && !error && (
         <button onClick={toggle} aria-label="Play" className="absolute left-1/2 top-1/2 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-overlay/60 text-overlay-foreground">
           <Play className="h-8 w-8 fill-current" />
         </button>

@@ -50,6 +50,13 @@
       "when": 1793150318393,
       "tag": "0006_add_watermark_settings_deprecate_stream",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793239066543,
+      "tag": "0007_video_ad_sources_and_fingerprint",
+      "breakpoints": true
     }
   ]
 }
