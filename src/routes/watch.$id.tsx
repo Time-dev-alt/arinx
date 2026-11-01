@@ -19,7 +19,8 @@ import { Button } from "@/components/ui/button";
 import { startSeconds } from "@/lib/watch-tools";
 
 export const Route = createFileRoute("/watch/$id")({
-  validateSearch: (search: Record<string, unknown>) => ({ t: startSeconds(search.t) }),
+  validateSearch: (search: Record<string, unknown>): { t?: number } =>
+    search.t === undefined ? {} : { t: startSeconds(search.t) },
   head: () => pageHead("Watch", "Watch videos on ArinX."),
   component: Watch,
 });
