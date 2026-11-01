@@ -12,7 +12,7 @@ type VastAd = {
 };
 
 /** Parses "HH:MM:SS(.mmm)", "SS%", or plain seconds into a number of seconds. */
-function parseSkipOffset(offset: string | null | undefined, duration: number): number {
+export function parseSkipOffset(offset: string | null | undefined, duration: number): number {
   if (!offset) return 5;
   if (offset.endsWith("%")) {
     const pct = Number(offset.slice(0, -1));
