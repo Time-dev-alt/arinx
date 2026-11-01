@@ -33,10 +33,11 @@ async function loadVastAd(tagUrl: string): Promise<VastAd | null> {
   for (const ad of response.ads ?? []) {
     for (const creative of ad.creatives ?? []) {
       if (creative.type !== "linear") continue;
-      const media = (creative.mediaFiles ?? [])
+      type MediaFile = { fileURL?: string; deliveryType?: string; mimeType?: string; bitrate?: number };
+      const media = ((creative.mediaFiles ?? []) as MediaFile[])
         .filter((m) => m.fileURL && (m.deliveryType === "progressive" || !m.deliveryType))
         .sort((a, b) => {
-          const mp4 = (m: typeof a) => (m.mimeType === "video/mp4" ? 0 : 1);
+          const mp4 = (m: MediaFile) => (m.mimeType === "video/mp4" ? 0 : 1);
           return mp4(a) - mp4(b) || (a.bitrate ?? 0) - (b.bitrate ?? 0);
         })[0];
       if (!media?.fileURL) continue;
@@ -46,7 +47,7 @@ async function loadVastAd(tagUrl: string): Promise<VastAd | null> {
         clickUrl: creative.videoClickThroughURLTemplate?.url ?? null,
         skipSeconds: parseSkipOffset(creative.skipOffset, creative.duration ?? 0),
         trackImpression: () => tracker.trackImpression(),
-        trackClick: () => tracker.trackClick(),
+        trackClick: () => tracker.click(),
       };
     }
   }
