@@ -82,9 +82,14 @@ function AdminPage() {
             </label>
           ))}
         </Section>
-        <Section title="Video ads before videos" hint="A skippable sponsor video shown before playback.">
+        <Section title="Video ads before videos" hint="A skippable video ad shown before playback. Paste a VAST tag from any ad network, or a direct sponsor video link — VAST takes priority when both are set.">
           <Toggle label="Enable pre-roll ads" on={s.preroll_enabled} set={(v) => up("preroll_enabled", v)} />
-          <input className={input} placeholder="Ad video link (.mp4 or .m3u8)" value={s.preroll_video_url} onChange={(e) => up("preroll_video_url", e.target.value)} />
+          <label className="block space-y-1 text-sm"><span className="font-medium">Ad network tag (VAST)</span>
+            <input className={cn(input, "font-mono text-xs")} placeholder="https://…vast-tag.xml from your ad provider" value={s.preroll_vast_url} onChange={(e) => up("preroll_vast_url", e.target.value)} />
+          </label>
+          <label className="block space-y-1 text-sm"><span className="font-medium">Direct sponsor video (fallback)</span>
+            <input className={input} placeholder="Ad video link (.mp4 or .m3u8)" value={s.preroll_video_url} onChange={(e) => up("preroll_video_url", e.target.value)} />
+          </label>
           <input className={input} placeholder="Where clicking the ad goes (https://…)" value={s.preroll_click_url} onChange={(e) => up("preroll_click_url", e.target.value)} />
           <label className="flex items-center justify-between text-sm">Seconds before “Skip” appears
             <input type="number" min={0} max={30} className={cn(input, "w-24")} value={s.preroll_skip_seconds} onChange={(e) => up("preroll_skip_seconds", Number(e.target.value))} />
