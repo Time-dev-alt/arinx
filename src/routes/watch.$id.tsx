@@ -107,7 +107,7 @@ function Watch() {
       key={id}
       src={src ?? ""}
       poster={v.thumbnail ?? undefined}
-      startTime={t}
+      startTime={t ?? 0}
       onTimeChange={setTime}
       theater={theater}
       onTheater={() => setTheater((t) => !t)}
