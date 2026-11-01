@@ -57,6 +57,13 @@
       "when": 1793239066543,
       "tag": "0007_video_ad_sources_and_fingerprint",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793510536323,
+      "tag": "0008_tighten_public_read_policies",
+      "breakpoints": true
     }
   ]
 }
