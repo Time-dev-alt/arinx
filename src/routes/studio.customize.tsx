@@ -24,6 +24,16 @@ function Customize() {
   const [f, setF] = useState<Form | null>(null);
   const [newImg, setNewImg] = useState<{ avatar?: string; banner?: string }>({});
   const [busy, setBusy] = useState(false);
+  const [wm, setWm] = useState<{ mode: "text" | "image"; text: string; path: string | null; file: File | null; preview: string | null }>({ mode: "text", text: "", path: null, file: null, preview: null });
+  useEffect(() => {
+    if (!uid) return;
+    void supabase.from("profiles").select("watermark_mode, watermark_text, watermark_image_path").eq("id", uid).maybeSingle().then(async ({ data }) => {
+      if (!data) return;
+      let preview: string | null = null;
+      if (data.watermark_image_path) preview = (await supabase.storage.from("channel-art").createSignedUrl(data.watermark_image_path, 3600)).data?.signedUrl ?? null;
+      setWm({ mode: data.watermark_mode === "image" ? "image" : "text", text: data.watermark_text ?? "", path: data.watermark_image_path, file: null, preview });
+    });
+  }, [uid]);
   useEffect(() => {
     if (me && !f) setF({ name: me.name, handle: me.handle, bio: me.bio, location: me.location, avatar: me.avatar, banner: me.banner,
       ...Object.fromEntries(CHANNEL_LINKS.map(([key, label]) => [key, me.links.find(link => link.label === label)?.url ?? ""])) as Pick<Form, "website_url" | "instagram_url" | "x_url" | "discord_url"> });
@@ -44,7 +54,13 @@ function Customize() {
       }
       const patch = { name: f.name.trim(), handle, bio: f.bio, location: f.location,
         website_url: safeExternalUrl(f.website_url), instagram_url: safeExternalUrl(f.instagram_url), x_url: safeExternalUrl(f.x_url), discord_url: safeExternalUrl(f.discord_url),
-        ...{} as { avatar_url?: string; banner_url?: string } };
+        watermark_mode: wm.mode, watermark_text: wm.text.trim().slice(0, 40) || null,
+        ...{} as { avatar_url?: string; banner_url?: string; watermark_image_path?: string } };
+      if (wm.mode === "image" && !wm.file && !wm.path) { toast.error("Choose a watermark image or switch to text"); return; }
+      if (wm.file) {
+        patch.watermark_image_path = await uploadFile("channel-art", me.id, wm.file, wm.file.type === "image/png" ? "png" : "jpg");
+        setWm((w) => ({ ...w, path: patch.watermark_image_path!, file: null }));
+      }
       if (newImg.avatar) patch.avatar_url = await uploadFile("channel-art", me.id, await dataUrlToBlob(newImg.avatar), "jpg");
       if (newImg.banner) patch.banner_url = await uploadFile("channel-art", me.id, await dataUrlToBlob(newImg.banner), "jpg");
       const { error } = await supabase.from("profiles").update(patch).eq("id", me.id);
@@ -105,6 +121,25 @@ function Customize() {
           </label>
           <label className="block text-sm font-medium">Location<input className={field} value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} /></label>
           <label className="block text-sm font-medium">Description<textarea rows={5} className={field} value={f.bio} onChange={(e) => setF({ ...f, bio: e.target.value })} /></label>
+        </section>
+        <section className="space-y-4 md:col-span-2"><h2 className="font-semibold">Video watermark</h2>
+          <p className="text-sm text-muted-foreground">Burned into every video you upload, along with an invisible fingerprint. It can't be turned off — it protects your work when videos are downloaded.</p>
+          <div className="flex gap-2">
+            {(["text", "image"] as const).map((m) => (
+              <Button key={m} type="button" variant={wm.mode === m ? "default" : "secondary"} onClick={() => setWm({ ...wm, mode: m })}>{m === "text" ? "Text" : "Image / logo"}</Button>
+            ))}
+          </div>
+          {wm.mode === "text" ? (
+            <label className="block text-sm font-medium">Watermark text<input className={field} maxLength={40} placeholder={`@${me.handle}`} value={wm.text} onChange={(e) => setWm({ ...wm, text: e.target.value })} /></label>
+          ) : (
+            <div className="flex items-center gap-4">
+              <div className="grid h-20 w-36 place-items-center rounded-lg bg-overlay p-2">{wm.preview ? <img src={wm.preview} alt="Watermark preview" className="max-h-full max-w-full object-contain" /> : <span className="text-xs text-overlay-foreground/60">No image</span>}</div>
+              <label className="cursor-pointer text-sm font-medium text-primary">Choose image (PNG with transparency works best)
+                <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={(e) => { const fl = e.target.files?.[0]; if (!fl) return; if (fl.size > 2_000_000) return toast.error("Image must be under 2 MB"); setWm({ ...wm, file: fl, preview: URL.createObjectURL(fl) }); }} />
+              </label>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">Applies to new uploads. Leave text empty to use your handle.</p>
         </section>
         <section className="space-y-4"><h2 className="font-semibold">Channel links</h2>
           {CHANNEL_LINKS.map(([key, label]) => <label key={key} className="block text-sm font-medium">{label}<input type="url" className={field} placeholder="https://…" value={f[key]} onChange={e => setF({ ...f, [key]: e.target.value })} /></label>)}
