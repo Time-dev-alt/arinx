@@ -17,6 +17,8 @@ import { PrerollAd } from "@/components/PrerollAd";
 import { ShareDialog } from "@/components/ShareDialog";
 import { Button } from "@/components/ui/button";
 import { startSeconds } from "@/lib/watch-tools";
+import { guaranteedSeconds, totalAds } from "@/lib/ad-schedule";
+import { useSiteSettings } from "@/lib/settings";
 
 export const Route = createFileRoute("/watch/$id")({
   validateSearch: (search: Record<string, unknown>): { t?: number } =>
@@ -77,9 +79,13 @@ function Watch() {
   const [time, setTime] = useState(0);
   const [autoplay, setAutoplay] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [mid, setMid] = useState<{ i: number; t: number } | null>(null);
+  const { data: settings } = useSiteSettings();
+  const adsOn = !!(settings?.ads_enabled && settings.preroll_enabled && (settings.preroll_video_url || settings.preroll_vast_url));
 
   useEffect(() => {
     setAdDone(false);
+    setMid(null);
     setTime(0);
   if (!v) return;
     void actions.recordWatch(uid, id).then(() => qc.invalidateQueries({ queryKey: ["me"] }));
@@ -101,8 +107,12 @@ function Watch() {
   else related = [...related.filter((x) => x.category === v.category), ...related.filter((x) => x.category !== v.category)];
   const next = related[0];
 
+  const guaranteed = guaranteedSeconds(v.duration);
   const playerEl = adDone ? (
+    <div className="relative w-full">
     <Player
+      hold={!!mid}
+      onAdBreak={adsOn ? (i, total) => setMid({ i, t: total }) : undefined}
       ref={player}
       key={id}
       src={src ?? ""}
@@ -113,8 +123,12 @@ function Watch() {
       onTheater={() => setTheater((t) => !t)}
       onNext={next && autoplay ? () => nav({ to: "/watch/$id", params: { id: next.id } }) : undefined}
     />
+    {mid && (
+      <PrerollAd key={`mid-${mid.i}`} className="absolute inset-0 z-10" guaranteed={guaranteed} label={`Ad ${mid.i} of ${mid.t}`} onDone={() => setMid(null)} />
+    )}
+    </div>
   ) : (
-    <PrerollAd key={id} onDone={() => setAdDone(true)} />
+    <PrerollAd key={id} guaranteed={guaranteed} label={`Ad 1 of ${v.duration ? totalAds(v.duration) : 1}`} onDone={() => setAdDone(true)} />
   );
 
   const sidebar = (

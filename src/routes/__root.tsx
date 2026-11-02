@@ -77,6 +77,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:description", content: "Watch, share and create videos on ArinX." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "b38c5333923b048c5677322c38ed246322833031", content: "b38c5333923b048c5677322c38ed246322833031" },
     ],
     links: [
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
