@@ -171,6 +171,9 @@ export type Database = {
           location: string
           name: string
           subscriber_count: number
+          watermark_image_path: string | null
+          watermark_mode: string
+          watermark_text: string | null
           website_url: string | null
           x_url: string | null
         }
@@ -186,6 +189,9 @@ export type Database = {
           location?: string
           name?: string
           subscriber_count?: number
+          watermark_image_path?: string | null
+          watermark_mode?: string
+          watermark_text?: string | null
           website_url?: string | null
           x_url?: string | null
         }
@@ -201,6 +207,9 @@ export type Database = {
           location?: string
           name?: string
           subscriber_count?: number
+          watermark_image_path?: string | null
+          watermark_mode?: string
+          watermark_text?: string | null
           website_url?: string | null
           x_url?: string | null
         }

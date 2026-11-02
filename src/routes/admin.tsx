@@ -99,8 +99,8 @@ function AdminPage() {
 
       {tab === "Watermark" && (
         <Section title="Permanent watermarks" hint="Burned into every frame during upload — they survive downloads, re-uploads and screen recordings, making copyright claims actionable.">
-          <Toggle label="Watermark all new uploads" on={s.watermark_enabled} set={(v) => up("watermark_enabled", v)} />
-          <label className="block space-y-1 text-sm"><span className="font-medium">Watermark text</span>
+          <p className="rounded-lg bg-muted p-3 text-sm">Watermarks are always on. Creators choose their own text or logo in Customize channel; this text is used only as a fallback.</p>
+          <label className="block space-y-1 text-sm"><span className="font-medium">Fallback watermark text</span>
             <input className={input} maxLength={40} value={s.watermark_text} onChange={(e) => up("watermark_text", e.target.value)} placeholder="ArinX" />
           </label>
           <div className="space-y-1 text-sm">
@@ -113,7 +113,7 @@ function AdminPage() {
               ))}
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">Every upload also gets an invisible fingerprint ID embedded in the file, so copies can be traced back to ArinX.</p>
+          <p className="text-xs text-muted-foreground">Every upload also gets an invisible layer (a faint repeating fingerprint across the whole frame) plus the fingerprint in the file details, so copies can be traced back to the channel.</p>
         </Section>
       )}
 

@@ -53,6 +53,7 @@
   --color-chart-5: var(--chart-5);
   --color-overlay: var(--overlay);
   --color-overlay-foreground: var(--overlay-foreground);
+  --color-ad-marker: var(--ad-marker);
   --font-display: "Outfit", sans-serif;
   --font-sans: "Figtree", system-ui, sans-serif;
   --color-sidebar: var(--sidebar);
@@ -88,6 +89,7 @@
   --ring: oklch(0.6 0.23 28);
   --overlay: oklch(0.08 0 0);
   --overlay-foreground: oklch(0.99 0 0);
+  --ad-marker: oklch(0.86 0.17 90);
   --chart-1: oklch(0.6 0.23 28);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);

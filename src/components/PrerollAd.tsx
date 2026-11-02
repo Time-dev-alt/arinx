@@ -59,7 +59,7 @@ async function loadVastAd(tagUrl: string): Promise<VastAd | null> {
  * Supports a direct sponsor video URL or any VAST ad-network tag,
  * configured in the owner admin panel (Monetization tab).
  */
-export function PrerollAd({ onDone, className }: { onDone: () => void; className?: string }) {
+export function PrerollAd({ onDone, className, guaranteed = 0, label = "Ad" }: { onDone: () => void; className?: string; guaranteed?: number; label?: string }) {
   const { data: s } = useSiteSettings();
   const vid = useRef<HTMLVideoElement>(null);
   const [left, setLeft] = useState(0);
@@ -90,7 +90,7 @@ export function PrerollAd({ onDone, className }: { onDone: () => void; className
   // VAST takes priority; fall back to the direct sponsor video when the tag fails or is empty.
   const src = useVast ? (vast?.mediaUrl ?? (vastFailed ? s.preroll_video_url : null)) : s.preroll_video_url;
   const clickUrl = useVast && vast ? vast.clickUrl ?? s.preroll_click_url : s.preroll_click_url;
-  const skipAt = Math.max(0, useVast && vast ? vast.skipSeconds : s.preroll_skip_seconds);
+  const skipAt = Math.max(0, guaranteed, useVast && vast ? vast.skipSeconds : s.preroll_skip_seconds);
 
   if (!src) {
     // VAST tag still loading — show a quiet placeholder instead of the player.
@@ -120,7 +120,7 @@ export function PrerollAd({ onDone, className }: { onDone: () => void; className
         onEnded={onDone}
         onError={onDone}
       />
-      <span className="absolute left-3 top-3 rounded bg-overlay/80 px-2 py-0.5 text-xs font-medium text-overlay-foreground">Ad</span>
+      <span className="absolute left-3 top-3 rounded bg-overlay/80 px-2 py-0.5 text-xs font-medium text-overlay-foreground">{label}</span>
       <button
         onClick={() => setMuted((m) => !m)}
         aria-label={muted ? "Unmute ad" : "Mute ad"}

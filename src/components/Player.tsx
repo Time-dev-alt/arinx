@@ -12,6 +12,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { duration as fmt } from "@/lib/format";
+import { AD_COUNTDOWN, midrollTimes } from "@/lib/ad-schedule";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -24,8 +25,8 @@ const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
 export const Player = forwardRef<
   PlayerHandle,
-  { src: string; poster?: string; theater?: boolean; onTheater?: () => void; onNext?: () => void; startTime?: number; onTimeChange?: (time: number) => void }
->(function Player({ src, poster, theater, onTheater, onNext, startTime = 0, onTimeChange }, ref) {
+  { src: string; poster?: string; theater?: boolean; onTheater?: () => void; onNext?: () => void; startTime?: number; onTimeChange?: (time: number) => void; hold?: boolean; onAdBreak?: (index: number, total: number) => void }
+>(function Player({ src, poster, theater, onTheater, onNext, startTime = 0, onTimeChange, hold = false, onAdBreak }, ref) {
   const url = src;
   const wrap = useRef<HTMLDivElement>(null);
   const vid = useRef<HTMLVideoElement>(null);
@@ -44,6 +45,27 @@ export const Player = forwardRef<
   const [shortcuts, setShortcuts] = useState(false);
   const [error, setError] = useState(false);
   const hideT = useRef<number>(0);
+  const played = useRef<Set<number>>(new Set());
+  const breaks = onAdBreak ? midrollTimes(dur) : [];
+  const nextBreak = breaks.find((b, i) => !played.current.has(i) && b > startTime);
+  const adIn = nextBreak !== undefined && playing ? nextBreak - time : Infinity;
+
+  // Hold (paused) while a mid-roll ad plays over the video; resume afterwards.
+  useEffect(() => {
+    const v = vid.current;
+    if (!v) return;
+    if (hold) v.pause();
+    else if (played.current.size) void v.play().catch(() => {});
+  }, [hold]);
+
+  // Trigger a mid-roll once playback reaches (or is scrubbed past) the next break.
+  useEffect(() => {
+    if (!onAdBreak || hold) return;
+    const i = breaks.findIndex((b, idx) => !played.current.has(idx) && b > startTime && time >= b);
+    if (i < 0) return;
+    breaks.forEach((b, idx) => { if (b <= time) played.current.add(idx); });
+    onAdBreak(i + 2, breaks.length + 1);
+  }, [time, hold]);
 
   useImperativeHandle(ref, () => ({
     seek: (t) => {
@@ -148,7 +170,12 @@ export const Player = forwardRef<
       <Dialog open={shortcuts} onOpenChange={setShortcuts}><DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-sm"><DialogTitle>Playback shortcuts</DialogTitle><DialogDescription>Keyboard controls</DialogDescription><dl className="grid grid-cols-2 gap-3 text-sm">{[["Space / K", "Play or pause"], ["J / L", "Back / forward 10s"], ["← / →", "Back / forward 5s"], ["M", "Mute"], ["F", "Full screen"], ["T", "Theater mode"], ["I", "Picture in picture"]].map(([key, label]) => <div key={key} className="contents"><dt className="font-mono text-primary">{key}</dt><dd>{label}</dd></div>)}</dl></DialogContent></Dialog>
       {error && <div className="absolute inset-0 grid place-content-center gap-3 bg-overlay text-center text-overlay-foreground"><p>Unable to play this video</p><Button variant="secondary" onClick={() => { setError(false); vid.current?.load(); }}>Retry</Button></div>}
 
-      {!playing && !error && (
+      {adIn > 0 && adIn <= AD_COUNTDOWN && !hold && (
+        <div className="absolute bottom-20 right-3 rounded-md bg-overlay/85 px-3 py-1.5 text-sm font-medium text-overlay-foreground">
+          Ad in {Math.ceil(adIn)}
+        </div>
+      )}
+      {!playing && !error && !hold && (
         <button onClick={toggle} aria-label="Play" className="absolute left-1/2 top-1/2 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-overlay/60 text-overlay-foreground">
           <Play className="h-8 w-8 fill-current" />
         </button>
@@ -173,6 +200,9 @@ export const Player = forwardRef<
             <div className="absolute inset-y-0 left-0 rounded bg-overlay-foreground/40" style={{ width: `${dur ? (buffered / dur) * 100 : 0}%` }} />
             <div className="absolute inset-y-0 left-0 rounded bg-primary" style={{ width: `${dur ? (time / dur) * 100 : 0}%` }} />
           </div>
+          {dur > 0 && breaks.map((b) => (
+            <span key={b} className="pointer-events-none absolute top-1/2 h-1.5 w-1 -translate-y-1/2 bg-ad-marker" style={{ left: `${(b / dur) * 100}%` }} />
+          ))}
           <div className="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 scale-0 rounded-full bg-primary transition group-hover/bar:scale-100" style={{ left: `${dur ? (time / dur) * 100 : 0}%` }} />
           {hover !== null && dur > 0 && (
             <span className="absolute -top-7 -translate-x-1/2 rounded bg-overlay/90 px-1.5 py-0.5 text-xs" style={{ left: `${hover * 100}%` }}>
