@@ -78,22 +78,25 @@ function UploadPage() {
     if (!file || !f.title.trim()) return toast.error("Add a video and a title");
     setBusy(true);
     try {
-      let toUpload: Blob = file;
-      let ext = (file.name.split(".").pop() || "mp4").toLowerCase();
-      if (settings?.compression_enabled) {
-        const r = await compressVideo(file, {
-          preset: settings.compression_preset as CompressPreset,
-          watermarkEnabled: settings.watermark_enabled,
-          watermarkText: settings.watermark_text,
-          watermarkPosition: settings.watermark_position,
-          onProgress: (ratio, stage) => setStage(ratio > 0 ? `${stage} ${Math.round(ratio * 100)}%` : stage),
-        });
-        if (r.compressed) {
-          toUpload = r.blob;
-          ext = "mp4";
-          toast.success(`Compressed ${(r.originalSize / 1048576).toFixed(0)} MB → ${(r.compressedSize / 1048576).toFixed(0)} MB`);
-        }
+      // Watermarks are always applied; compression preset falls back to "quality" when shrinking is off.
+      const { data: wm } = await supabase.from("profiles").select("handle, watermark_mode, watermark_text, watermark_image_path").eq("id", uid).maybeSingle();
+      let watermarkImage: Blob | null = null;
+      if (wm?.watermark_mode === "image" && wm.watermark_image_path) {
+        const { data: img } = await supabase.storage.from("channel-art").download(wm.watermark_image_path);
+        watermarkImage = img ?? null;
       }
+      const r = await compressVideo(file, {
+        preset: (settings?.compression_enabled ? settings.compression_preset : "quality") as CompressPreset,
+        watermarkImage,
+        watermarkText: wm?.watermark_text?.trim() || (wm?.handle ? `@${wm.handle}` : settings?.watermark_text || "ArinX"),
+        ownerTag: wm?.handle ? `@${wm.handle}` : uid.slice(0, 8),
+        watermarkPosition: settings?.watermark_position ?? "bottom-right",
+        onProgress: (ratio, stage) => setStage(ratio > 0 ? `${stage} ${Math.round(ratio * 100)}%` : stage),
+      });
+      const toUpload: Blob = r.blob;
+      const ext = "mp4";
+      const fingerprint = r.fingerprint;
+      toast.success(`Watermarked · ${(r.originalSize / 1048576).toFixed(0)} MB → ${(r.compressedSize / 1048576).toFixed(0)} MB`);
       setStage("Uploading video…");
       const videoPath = await uploadFile("videos", uid, toUpload, ext);
       let thumbPath: string | null = null;
@@ -106,7 +109,7 @@ function UploadPage() {
       const { error } = await supabase.from("videos").insert({
         owner_id: uid, title: f.title.trim(), description: f.description, category: f.category,
         tags: f.tags.split(",").map((x) => x.trim()).filter(Boolean), visibility: f.visibility,
-        is_short: f.isShort, video_path: videoPath, thumbnail_url: thumbPath, duration: Math.round(dur),
+        is_short: f.isShort, video_path: videoPath, thumbnail_url: thumbPath, duration: Math.round(dur), watermark_fingerprint: fingerprint,
       });
       if (error) throw error;
       await Promise.all([qc.invalidateQueries({ queryKey: ["videos"] }), qc.invalidateQueries({ queryKey: ["channel"] })]);
