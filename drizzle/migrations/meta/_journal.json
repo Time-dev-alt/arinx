@@ -64,6 +64,13 @@
       "when": 1793510536323,
       "tag": "0008_tighten_public_read_policies",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793635189584,
+      "tag": "0009_channel_watermarks",
+      "breakpoints": true
     }
   ]
 }
