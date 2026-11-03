@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
-import { Eye, Clock, Users, Pencil, Trash2, Upload } from "lucide-react";
+import { Eye, Clock, Users, Pencil, Trash2, Upload, ShieldCheck, Download } from "lucide-react";
 import { toast } from "sonner";
 import { StudioNav } from "@/components/StudioNav";
 import { Avatar, SignInPrompt } from "@/components/common";
@@ -9,6 +9,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { supabase } from "@/integrations/supabase/client";
 import { CATEGORIES, channelQuery, useAuth, useMe, type Video, type Visibility } from "@/lib/api";
 import { compact, duration, pageHead } from "@/lib/format";
+
+import { Button } from "@/components/ui/button";
+import { monetizationProgress } from "@/lib/growth";
 
 export const Route = createFileRoute("/studio/")({
   head: () => pageHead("Studio", "Manage your videos and see channel analytics in ArinX Studio."),
@@ -81,9 +84,11 @@ function Studio() {
   const { data: me } = useMe();
   const qc = useQueryClient();
   const { data } = useQuery({ ...channelQuery(me?.handle ?? ""), enabled: !!me });
+  const { data: eligibility, error: eligibilityError } = useQuery({ queryKey: ["creator-monetization", uid], enabled: !!uid, queryFn: async () => { const { data, error } = await supabase.rpc("creator_monetization_status"); if (error) throw error; return data[0] ?? null; } });
   const [editing, setEditing] = useState<Video | null>(null);
   if (ready && !uid) return <SignInPrompt title="ArinX Studio" text="Sign in to upload and manage your videos." />;
   if (!me) return <div className="p-6"><div className="h-40 animate-pulse rounded-2xl bg-muted" /></div>;
+  const progress = monetizationProgress(eligibility?.subscribers ?? me.subscribers);
   const vids = data?.videos ?? [];
   const chrono = [...vids].reverse();
   const totalViews = vids.reduce((a, v) => a + v.views, 0);
@@ -124,6 +129,13 @@ function Studio() {
         <Stat icon={<Users className="h-4 w-4" />} label="Subscribers" value={compact(me.subscribers)} data={chrono.map((v) => v.likes)} note={`${vids.reduce((a, v) => a + v.likes, 0).toLocaleString()} total likes`} />
       </div>
 
+      <section className="mt-8 border-y border-border py-6">
+        <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-display text-xl font-semibold">Creator monetization</h2><span className="text-sm font-medium text-primary">{eligibilityError ? "Status unavailable" : eligibility?.eligible ? "Subscriber requirement met" : "Building toward eligibility"}</span></div>
+        <p className="mt-3 text-sm">{(eligibility?.subscribers ?? me.subscribers).toLocaleString()} / 1,000 subscribers</p>
+        <progress className="mt-2 h-2 w-full accent-primary" value={progress.percent} max={100} aria-label="Monetization subscriber progress" />
+        <p className="mt-2 text-sm text-muted-foreground">{progress.remaining ? `${progress.remaining.toLocaleString()} subscribers to go. ` : ""}Ads may appear on all channels. Creator payouts are not connected yet.</p>
+        <div className="mt-5 flex flex-wrap items-center gap-2 text-sm"><ShieldCheck className="h-4 w-4 text-primary" /><span>Upload fingerprints</span><Button variant="outline" size="sm" onClick={() => { const receipt = { channel: me.handle, exportedAt: new Date().toISOString(), videos: vids.map(v => ({ id: v.id, title: v.title, uploadedAt: v.publishedAt, fingerprint: v.fingerprint ?? null })) }; const url = URL.createObjectURL(new Blob([JSON.stringify(receipt, null, 2)], { type: "application/json" })); const a = document.createElement("a"); a.href = url; a.download = `${me.handle}-upload-records.json`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }}><Download className="h-4 w-4" />Export records</Button></div>
+      </section>
       <h2 className="mb-3 mt-10 font-display text-xl font-semibold">Channel content</h2>
       <div className="overflow-x-auto rounded-2xl border border-border">
         <table className="w-full min-w-[720px] text-sm">

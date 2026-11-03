@@ -36,7 +36,7 @@ export function parseTime(t: string) {
   return t.split(":").reduce((a, p) => a * 60 + Number(p), 0);
 }
 
-export const pageHead = (title: string, description: string) => ({
+export const pageHead = (title: string, description: string, path?: string) => ({
   meta: [
     { title: `${title} - ArinX` },
     { name: "description", content: description },
@@ -44,5 +44,8 @@ export const pageHead = (title: string, description: string) => ({
     { property: "og:description", content: description },
     { property: "og:type", content: "website" },
     { name: "twitter:card", content: "summary_large_image" },
+    { property: "og:site_name", content: "ArinX" },
+    ...(path ? [{ property: "og:url", content: `https://arin-x.lovable.app${path}` }] : []),
   ],
+  links: path ? [{ rel: "canonical", href: `https://arin-x.lovable.app${path}` }] : [],
 });

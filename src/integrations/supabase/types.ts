@@ -508,6 +508,14 @@ export type Database = {
     }
     Functions: {
       claim_owner: { Args: never; Returns: boolean }
+      creator_monetization_status: {
+        Args: never
+        Returns: {
+          eligible: boolean
+          remaining: number
+          subscribers: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

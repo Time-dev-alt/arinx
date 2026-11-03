@@ -1,4 +1,6 @@
 # ArinX visitor and creator update
+- [ ] Growth package: discover feed modes, rising creators, category links, trending periods, expanded sharing, channel sharing, content-specific SEO, sitemap, IP receipts, and 1,000-subscriber eligibility.
+- [ ] Fix flagged file-read policy while preserving published media access.
 - [x] Downloads, timestamp sharing, embeddable playback, shortcuts and autoplay control.
 - [x] Channel social links and reliable thumbnail/metadata selection.
 - [x] Reliable compression/watermark processing and upload cleanup.

@@ -20,10 +20,13 @@ import { startSeconds } from "@/lib/watch-tools";
 import { guaranteedSeconds, totalAds } from "@/lib/ad-schedule";
 import { useSiteSettings } from "@/lib/settings";
 
+import { publicContent } from "@/lib/public-content.functions";
+
 export const Route = createFileRoute("/watch/$id")({
   validateSearch: (search: Record<string, unknown>): { t?: number } =>
     search.t === undefined ? {} : { t: startSeconds(search.t) },
-  head: () => pageHead("Watch", "Watch videos on ArinX."),
+  loader: ({ params }) => publicContent({ data: { kind: "video", id: params.id } }),
+  head: ({ params, loaderData }) => pageHead(loaderData?.title ?? "Watch video", loaderData?.description.slice(0, 180) ?? "Watch videos on ArinX.", `/watch/${encodeURIComponent(params.id)}`),
   component: Watch,
 });
 
@@ -191,6 +194,7 @@ function Watch() {
           </button>
         </div>
       </div>
+      <div className="mt-4 flex flex-wrap gap-3 text-sm"><Link to="/category/$category" params={{ category: v.category.toLowerCase() }} className="text-primary hover:underline">{v.category}</Link>{v.fingerprint && <span className="text-muted-foreground">Watermarked · @{c.handle}</span>}</div>
       <Description text={v.description} tags={v.tags} views={v.views} at={v.publishedAt} onSeek={(t) => player.current?.seek(t)} />
       <AdSlot slot="adsterra_native" className="mt-4 rounded-xl border border-border p-3" />
       <Comments videoId={id} />

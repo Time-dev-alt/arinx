@@ -1,18 +1,23 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { Pencil, ExternalLink } from "lucide-react";
+import { Pencil, ExternalLink, Share2 } from "lucide-react";
 import { ago, compact, pageHead } from "@/lib/format";
 import { channelQuery, useAuth } from "@/lib/api";
 import { Empty, ShortCard, VideoCard } from "@/components/VideoCard";
 import { Avatar, Loading, SubscribeButton } from "@/components/common";
 import { cn } from "@/lib/utils";
 
+import { publicContent } from "@/lib/public-content.functions";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+
 const TABS = ["Home", "Videos", "Shorts", "Playlists", "About"] as const;
 
 export const Route = createFileRoute("/channel/$handle")({
   validateSearch: (s: Record<string, unknown>): { tab?: string } => ({ tab: typeof s.tab === "string" ? s.tab : undefined }),
-  head: ({ params }) => pageHead(`@${params.handle}`, `Watch videos and Shorts from @${params.handle} on ArinX.`),
+  loader: ({ params }) => publicContent({ data: { kind: "channel", id: params.handle } }),
+  head: ({ params, loaderData }) => pageHead(loaderData?.title ?? `@${params.handle}`, loaderData?.description.slice(0, 180) ?? `Watch videos from @${params.handle} on ArinX.`, `/channel/${encodeURIComponent(params.handle)}`),
   component: ChannelPage,
 });
 
@@ -44,7 +49,8 @@ function ChannelPage() {
           </p>
           <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">{c.bio}</p>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">{c.links.map(link => <a key={link.label} href={link.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">{link.label}<ExternalLink className="h-3 w-3" /></a>)}</div>
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="outline" onClick={async () => { try { await navigator.clipboard.writeText(`https://arin-x.lovable.app/channel/${encodeURIComponent(c.handle)}`); toast.success("Channel link copied"); } catch { toast.error("Could not copy channel link"); } }}><Share2 className="h-4 w-4" />Share channel</Button>
             <SubscribeButton channelId={c.id} />
             {mine && (
               <Link to="/studio/customize" className="flex items-center gap-2 rounded-full bg-muted px-4 py-2 text-sm font-medium hover:bg-accent"><Pencil className="h-4 w-4" /> Customize channel</Link>
