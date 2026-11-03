@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { embedLink, watchLink } from "@/lib/watch-tools";
+import { socialLink } from "@/lib/growth";
 import { duration } from "@/lib/format";
 
 export function ShareDialog({ id, title, time, open, onOpenChange }: {
@@ -21,8 +22,10 @@ export function ShareDialog({ id, title, time, open, onOpenChange }: {
     <DialogContent className="max-h-[85vh] max-w-[calc(100%-2rem)] overflow-y-auto sm:max-w-lg">
       <DialogHeader><DialogTitle>Share video</DialogTitle><DialogDescription className="break-words">{title}</DialogDescription></DialogHeader>
       <div className="flex flex-wrap gap-2">
-        <Button variant="secondary" asChild><a href={`https://wa.me/?text=${encodeURIComponent(title + " " + url)}`} target="_blank" rel="noopener noreferrer">WhatsApp <ExternalLink /></a></Button>
-        <Button variant="secondary" asChild><a href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}`} target="_blank" rel="noopener noreferrer">X <ExternalLink /></a></Button>
+        <Button variant="secondary" asChild><a href={`https://wa.me/?text=${encodeURIComponent(title + " " + socialLink(url, "whatsapp"))}`} target="_blank" rel="noopener noreferrer">WhatsApp <ExternalLink /></a></Button>
+        <Button variant="secondary" asChild><a href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(socialLink(url, "x"))}`} target="_blank" rel="noopener noreferrer">X <ExternalLink /></a></Button>
+        <Button variant="secondary" asChild><a href={`https://t.me/share/url?url=${encodeURIComponent(socialLink(url, "telegram"))}&text=${encodeURIComponent(title)}`} target="_blank" rel="noopener noreferrer">Telegram <ExternalLink /></a></Button>
+        <Button variant="secondary" asChild><a href={`https://www.reddit.com/submit?url=${encodeURIComponent(socialLink(url, "reddit"))}&title=${encodeURIComponent(title)}`} target="_blank" rel="noopener noreferrer">Reddit <ExternalLink /></a></Button>
         {typeof navigator !== "undefined" && !!navigator.share && <Button variant="secondary" onClick={() => void navigator.share({ title, url }).catch(() => {})}><Share2 /> Share</Button>}
       </div>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={timestamp} onChange={e => setTimestamp(e.target.checked)} />Start at {duration(time)}</label>

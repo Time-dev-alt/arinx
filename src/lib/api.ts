@@ -39,6 +39,7 @@ export interface Video {
   tags: string[];
   visibility: Visibility;
   isShort: boolean;
+  fingerprint?: string | null;
 }
 
 export interface Comment {
@@ -74,7 +75,7 @@ type ProfileRow = {
 type VideoRow = {
   id: string; owner_id: string; title: string; description: string; category: string; tags: string[];
   visibility: string; is_short: boolean; video_path: string; thumbnail_url: string | null; duration: number;
-  views: number; likes: number; created_at: string; profiles: ProfileRow | null;
+  views: number; likes: number; created_at: string; profiles: ProfileRow | null; watermark_fingerprint?: string | null;
 };
 
 function toChannel(p: ProfileRow, art: Record<string, string>): Channel {
@@ -101,7 +102,7 @@ async function hydrateVideos(rows: VideoRow[]): Promise<Video[]> {
     signMany("channel-art", rows.flatMap((r) => [r.profiles?.avatar_url, r.profiles?.banner_url])),
   ]);
   return rows.filter((r) => r.profiles).map((r) => ({
-    id: r.id, title: r.title, description: r.description, category: r.category, tags: r.tags ?? [],
+    fingerprint: r.watermark_fingerprint, id: r.id, title: r.title, description: r.description, category: r.category, tags: r.tags ?? [],
     visibility: r.visibility as Visibility, isShort: r.is_short, videoPath: r.video_path,
     thumbnailPath: r.thumbnail_url, thumbnail: pick(thumbs, r.thumbnail_url),
     duration: r.duration, views: Number(r.views), likes: r.likes, publishedAt: r.created_at,
