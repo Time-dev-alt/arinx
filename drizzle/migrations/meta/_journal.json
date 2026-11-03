@@ -71,6 +71,13 @@
       "when": 1793635189584,
       "tag": "0009_channel_watermarks",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793700965798,
+      "tag": "0010_creator_monetization_eligibility",
+      "breakpoints": true
     }
   ]
 }
