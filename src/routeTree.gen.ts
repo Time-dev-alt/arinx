@@ -18,6 +18,7 @@ import { Route as ResultsRouteImport } from './routes/results'
 import { Route as ShortsRouteImport } from './routes/shorts'
 import { Route as SubscriptionsRouteImport } from './routes/subscriptions'
 import { Route as TrendingRouteImport } from './routes/trending'
+import { Route as CategoryCategoryRouteImport } from './routes/category.$category'
 import { Route as ChannelHandleRouteImport } from './routes/channel.$handle'
 import { Route as EmbedIdRouteImport } from './routes/embed.$id'
 import { Route as PlaylistIdRouteImport } from './routes/playlist.$id'
@@ -71,6 +72,11 @@ const TrendingRoute = TrendingRouteImport.update({
   path: '/trending',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CategoryCategoryRoute = CategoryCategoryRouteImport.update({
+  id: '/category/$category',
+  path: '/category/$category',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ChannelHandleRoute = ChannelHandleRouteImport.update({
   id: '/channel/$handle',
   path: '/channel/$handle',
@@ -117,6 +123,7 @@ export interface FileRoutesByFullPath {
   '/shorts': typeof ShortsRoute
   '/subscriptions': typeof SubscriptionsRoute
   '/trending': typeof TrendingRoute
+  '/category/$category': typeof CategoryCategoryRoute
   '/channel/$handle': typeof ChannelHandleRoute
   '/embed/$id': typeof EmbedIdRoute
   '/playlist/$id': typeof PlaylistIdRoute
@@ -135,6 +142,7 @@ export interface FileRoutesByTo {
   '/shorts': typeof ShortsRoute
   '/subscriptions': typeof SubscriptionsRoute
   '/trending': typeof TrendingRoute
+  '/category/$category': typeof CategoryCategoryRoute
   '/channel/$handle': typeof ChannelHandleRoute
   '/embed/$id': typeof EmbedIdRoute
   '/playlist/$id': typeof PlaylistIdRoute
@@ -154,6 +162,7 @@ export interface FileRoutesById {
   '/shorts': typeof ShortsRoute
   '/subscriptions': typeof SubscriptionsRoute
   '/trending': typeof TrendingRoute
+  '/category/$category': typeof CategoryCategoryRoute
   '/channel/$handle': typeof ChannelHandleRoute
   '/embed/$id': typeof EmbedIdRoute
   '/playlist/$id': typeof PlaylistIdRoute
@@ -174,6 +183,7 @@ export interface FileRouteTypes {
     | '/shorts'
     | '/subscriptions'
     | '/trending'
+    | '/category/$category'
     | '/channel/$handle'
     | '/embed/$id'
     | '/playlist/$id'
@@ -192,6 +202,7 @@ export interface FileRouteTypes {
     | '/shorts'
     | '/subscriptions'
     | '/trending'
+    | '/category/$category'
     | '/channel/$handle'
     | '/embed/$id'
     | '/playlist/$id'
@@ -210,6 +221,7 @@ export interface FileRouteTypes {
     | '/shorts'
     | '/subscriptions'
     | '/trending'
+    | '/category/$category'
     | '/channel/$handle'
     | '/embed/$id'
     | '/playlist/$id'
@@ -229,6 +241,7 @@ export interface RootRouteChildren {
   ShortsRoute: typeof ShortsRoute
   SubscriptionsRoute: typeof SubscriptionsRoute
   TrendingRoute: typeof TrendingRoute
+  CategoryCategoryRoute: typeof CategoryCategoryRoute
   ChannelHandleRoute: typeof ChannelHandleRoute
   EmbedIdRoute: typeof EmbedIdRoute
   PlaylistIdRoute: typeof PlaylistIdRoute
@@ -303,6 +316,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TrendingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/category/$category': {
+      id: '/category/$category'
+      path: '/category/$category'
+      fullPath: '/category/$category'
+      preLoaderRoute: typeof CategoryCategoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/channel/$handle': {
       id: '/channel/$handle'
       path: '/channel/$handle'
@@ -365,6 +385,7 @@ const rootRouteChildren: RootRouteChildren = {
   ShortsRoute: ShortsRoute,
   SubscriptionsRoute: SubscriptionsRoute,
   TrendingRoute: TrendingRoute,
+  CategoryCategoryRoute: CategoryCategoryRoute,
   ChannelHandleRoute: ChannelHandleRoute,
   EmbedIdRoute: EmbedIdRoute,
   PlaylistIdRoute: PlaylistIdRoute,
