@@ -8,11 +8,18 @@ export type SiteSettings = Database["public"]["Tables"]["site_settings"]["Row"];
 export const siteSettingsQuery = queryOptions({
   queryKey: ["site_settings"],
   queryFn: async () => {
-    const { data, error } = await supabase.from("site_settings").select("*").eq("id", 1).maybeSingle();
+    const { data, error } = await supabase
+      .from("site_settings")
+      .select("*")
+      .eq("id", 1)
+      .maybeSingle();
     if (error) throw error;
     return data as SiteSettings | null;
   },
   staleTime: 60_000,
+  // Non-critical config: fail fast instead of leaving the player blank for
+  // several retry backoffs when the backend is unreachable.
+  retry: 1,
 });
 
 export const useSiteSettings = () => useQuery(siteSettingsQuery);

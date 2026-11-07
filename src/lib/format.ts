@@ -36,16 +36,7 @@ export function parseTime(t: string) {
   return t.split(":").reduce((a, p) => a * 60 + Number(p), 0);
 }
 
-export const pageHead = (title: string, description: string, path?: string) => ({
-  meta: [
-    { title: `${title} - ArinX` },
-    { name: "description", content: description },
-    { property: "og:title", content: `${title} - ArinX` },
-    { property: "og:description", content: description },
-    { property: "og:type", content: "website" },
-    { name: "twitter:card", content: "summary_large_image" },
-    { property: "og:site_name", content: "ArinX" },
-    ...(path ? [{ property: "og:url", content: `https://arin-x.lovable.app${path}` }] : []),
-  ],
-  links: path ? [{ rel: "canonical", href: `https://arin-x.lovable.app${path}` }] : [],
-});
+// SEO head generation lives in seo.ts. Kept as a re-export so existing route
+// imports keep working while every page gets canonicals, social cards and
+// structured data from one implementation.
+export { pageHead } from "@/lib/seo";

@@ -3,10 +3,14 @@ import { watchLink, embedLink, startSeconds, safeExternalUrl } from "@/lib/watch
 
 describe("Timestamp sharing", () => {
   it("opens the shared video at the selected second", () => {
-    expect(watchLink("https://arin-x.lovable.app", "video-1", 65.8)).toBe("https://arin-x.lovable.app/watch/video-1?t=65");
+    expect(watchLink("https://arin-x.lovable.app", "video-1", 65.8)).toBe(
+      "https://arin-x.lovable.app/watch/video-1?t=65",
+    );
   });
   it("embeds the selected video at the selected second", () => {
-    expect(embedLink("https://arin-x.lovable.app", "video-1", 90)).toBe("https://arin-x.lovable.app/embed/video-1?t=90");
+    expect(embedLink("https://arin-x.lovable.app", "video-1", 90)).toBe(
+      "https://arin-x.lovable.app/embed/video-1?t=90",
+    );
   });
   it("rejects invalid or negative playback positions", () => {
     expect(startSeconds("nope")).toBe(0);

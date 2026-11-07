@@ -9,7 +9,17 @@ import { Empty, VideoRow } from "@/components/VideoCard";
 import { Pills, SubscribeButton } from "@/components/common";
 import { compact, ago, pageHead, parseTime, subs } from "@/lib/format";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { actions, publicVideosQuery, recommend, useAuth, useRequireAuth, useUserData, videoQuery, videoSrcQuery } from "@/lib/api";
+import {
+  actions,
+  publicVideosQuery,
+  recommend,
+  useAuth,
+  useRequireAuth,
+  useUserData,
+  videoQuery,
+  videoSrcQuery,
+  type Video,
+} from "@/lib/api";
 import { Avatar } from "@/components/common";
 import { cn } from "@/lib/utils";
 import { AdSlot } from "@/components/AdSlot";
@@ -21,23 +31,81 @@ import { guaranteedSeconds, totalAds } from "@/lib/ad-schedule";
 import { useSiteSettings } from "@/lib/settings";
 
 import { publicContent } from "@/lib/public-content.functions";
+import { publicCatalog } from "@/lib/catalog.functions";
+import { videoFromMeta } from "@/lib/catalog";
+import { VideoLinks } from "@/components/SeoLinks";
+import { breadcrumbJsonLd, itemListJsonLd, videoJsonLd } from "@/lib/seo";
+import { canonicalUrl, categoryPath } from "@/lib/site";
 
 export const Route = createFileRoute("/watch/$id")({
   validateSearch: (search: Record<string, unknown>): { t?: number } =>
     search.t === undefined ? {} : { t: startSeconds(search.t) },
-  loader: ({ params }) => publicContent({ data: { kind: "video", id: params.id } }),
-  head: ({ params, loaderData }) => pageHead(loaderData?.title ?? "Watch video", loaderData?.description.slice(0, 180) ?? "Watch videos on ArinX.", `/watch/${encodeURIComponent(params.id)}`),
+  staleTime: 60_000,
+  loader: async ({ params }) => {
+    const [content, catalog] = await Promise.all([
+      publicContent({ data: { kind: "video", id: params.id } }),
+      publicCatalog({ data: { limit: 48 } }),
+    ]);
+    return { content, catalog };
+  },
+  head: ({ params, loaderData }) => {
+    const meta = loaderData?.content?.kind === "video" ? loaderData.content : null;
+    const path = `/watch/${encodeURIComponent(params.id)}`;
+    const related = (loaderData?.catalog?.videos ?? [])
+      .filter((v: Video) => v.id !== params.id)
+      .slice(0, 20)
+      .map((v) => ({ id: v.id, title: v.title }));
+    return pageHead(
+      meta?.title ?? "Video unavailable",
+      meta?.description ?? "Watch videos and Shorts on ArinX, the open-source video platform.",
+      {
+        path,
+        noindex: !meta,
+        type: meta ? "video.other" : "website",
+        image: meta?.thumbnail,
+        jsonLd: [
+          ...(meta ? [videoJsonLd(meta)] : []),
+          breadcrumbJsonLd([
+            { name: "Home", path: "/" },
+            ...(meta?.category ? [{ name: meta.category, path: categoryPath(meta.category) }] : []),
+            { name: meta?.title ?? "Video", path },
+          ]),
+          itemListJsonLd(related, "More videos on ArinX", canonicalUrl(path)),
+        ],
+      },
+    );
+  },
   component: Watch,
 });
 
-function Description({ text, tags, views, at, onSeek }: { text: string; tags: string[]; views: number; at: string; onSeek: (t: number) => void }) {
+function Description({
+  text,
+  tags,
+  views,
+  at,
+  onSeek,
+}: {
+  text: string;
+  tags: string[];
+  views: number;
+  at: string;
+  onSeek: (t: number) => void;
+}) {
   const [open, setOpen] = useState(false);
   const lines = text.split("\n");
   return (
-    <div onClick={() => !open && setOpen(true)} className={cn("mt-3 rounded-xl bg-muted p-3 text-sm", !open && "cursor-pointer hover:bg-accent")}>
+    <div
+      onClick={() => !open && setOpen(true)}
+      className={cn(
+        "mt-3 rounded-xl bg-muted p-3 text-sm",
+        !open && "cursor-pointer hover:bg-accent",
+      )}
+    >
       <p className="font-semibold">
         {views.toLocaleString()} views · {ago(at)}{" "}
-        <span className="text-primary">{tags.map((t) => `#${t.replace(/\s/g, "")}`).join(" ")}</span>
+        <span className="text-primary">
+          {tags.map((t) => `#${t.replace(/\s/g, "")}`).join(" ")}
+        </span>
       </p>
       <div className={cn("mt-1 whitespace-pre-wrap", !open && "line-clamp-2")}>
         {lines.map((l, i) => {
@@ -46,16 +114,36 @@ function Description({ text, tags, views, at, onSeek }: { text: string; tags: st
             <Fragment key={i}>
               {m ? (
                 <>
-                  <button onClick={(e) => { e.stopPropagation(); onSeek(parseTime(m[1])); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="font-medium text-primary hover:underline">{m[1]}</button> {m[2]}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSeek(parseTime(m[1]));
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    {m[1]}
+                  </button>{" "}
+                  {m[2]}
                 </>
-              ) : l}
+              ) : (
+                l
+              )}
               {"\n"}
             </Fragment>
           );
         })}
       </div>
       {open && (
-        <button onClick={(e) => { e.stopPropagation(); setOpen(false); }} className="mt-3 font-semibold">Show less</button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen(false);
+          }}
+          className="mt-3 font-semibold"
+        >
+          Show less
+        </button>
       )}
       {!open && <span className="font-semibold">...more</span>}
     </div>
@@ -69,9 +157,20 @@ function Watch() {
   const { uid } = useAuth();
   const qc = useQueryClient();
   const req = useRequireAuth();
-  const { data: v, isLoading } = useQuery(videoQuery(id));
-  const { data: all = [] } = useQuery(publicVideosQuery());
-  const { data: src } = useQuery({ ...videoSrcQuery(v?.videoPath ?? ""), enabled: !!v });
+  const loader = Route.useLoaderData();
+  const meta = loader?.content?.kind === "video" ? loader.content : null;
+  const { data: v, isLoading } = useQuery({
+    ...videoQuery(id),
+    initialData: meta ? videoFromMeta(meta) : undefined,
+  });
+  const { data: all = [] } = useQuery({
+    ...publicVideosQuery(),
+    initialData: loader?.catalog?.videos,
+  });
+  const { data: src } = useQuery({
+    ...videoSrcQuery(v?.videoPath ?? ""),
+    enabled: !!v?.videoPath,
+  });
   const nav = useNavigate();
   const player = useRef<PlayerHandle>(null);
   const [theater, setTheater] = useState(false);
@@ -84,73 +183,143 @@ function Watch() {
   const [downloading, setDownloading] = useState(false);
   const [mid, setMid] = useState<{ i: number; t: number } | null>(null);
   const { data: settings } = useSiteSettings();
-  const adsOn = !!(settings?.ads_enabled && settings.preroll_enabled && (settings.preroll_video_url || settings.preroll_vast_url));
+  const adsOn = !!(
+    settings?.ads_enabled &&
+    settings.preroll_enabled &&
+    (settings.preroll_video_url || settings.preroll_vast_url)
+  );
 
+  const hasVideo = !!v;
   useEffect(() => {
     setAdDone(false);
     setMid(null);
     setTime(0);
-  if (!v) return;
-    void actions.recordWatch(uid, id).then(() => qc.invalidateQueries({ queryKey: ["me"] }));
-  }, [id, !!v, uid]);
+    if (!hasVideo) return;
+    void actions
+      .recordWatch(uid, id)
+      .then(() => qc.invalidateQueries({ queryKey: ["me"] }))
+      .catch(() => {
+        /* view counting is best-effort and must not break playback */
+      });
+  }, [id, hasVideo, uid, qc]);
 
-  if (isLoading) return <div className="p-6"><div className="aspect-video animate-pulse rounded-xl bg-muted" /></div>;
-  if (!v) return <Empty title="Video unavailable" text="This video may have been removed or made private." />;
+  if (isLoading)
+    return (
+      <div className="p-6">
+        <div className="aspect-video animate-pulse rounded-xl bg-muted" />
+      </div>
+    );
+  if (!v)
+    return (
+      <Empty title="Video unavailable" text="This video may have been removed or made private." />
+    );
   const c = v.channel;
   const liked = u.liked.includes(id);
   const disliked = u.disliked.includes(id);
-  const react = (val: 1 | -1) => req("rate videos", async (me) => {
-    await actions.react(me, id, val, liked ? 1 : disliked ? -1 : 0);
-    await Promise.all([qc.invalidateQueries({ queryKey: ["me"] }), qc.invalidateQueries({ queryKey: ["video", id] })]);
-  });
+  const react = (val: 1 | -1) =>
+    req("rate videos", async (me) => {
+      await actions.react(me, id, val, liked ? 1 : disliked ? -1 : 0);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["me"] }),
+        qc.invalidateQueries({ queryKey: ["video", id] }),
+      ]);
+    });
   let related = recommend(all, u, id);
   const sameCh = related.filter((x) => x.channelId === v.channelId);
   if (filter === `From ${c.name}`) related = sameCh;
   else if (filter === v.category) related = related.filter((x) => x.category === v.category);
-  else related = [...related.filter((x) => x.category === v.category), ...related.filter((x) => x.category !== v.category)];
+  else
+    related = [
+      ...related.filter((x) => x.category === v.category),
+      ...related.filter((x) => x.category !== v.category),
+    ];
   const next = related[0];
 
   const guaranteed = guaranteedSeconds(v.duration);
   const playerEl = adDone ? (
     <div className="relative w-full">
-    <Player
-      hold={!!mid}
-      onAdBreak={adsOn ? (i, total) => setMid({ i, t: total }) : undefined}
-      ref={player}
-      key={id}
-      src={src ?? ""}
-      poster={v.thumbnail ?? undefined}
-      startTime={t ?? 0}
-      onTimeChange={setTime}
-      theater={theater}
-      onTheater={() => setTheater((t) => !t)}
-      onNext={next && autoplay ? () => nav({ to: "/watch/$id", params: { id: next.id } }) : undefined}
-    />
-    {mid && (
-      <PrerollAd key={`mid-${mid.i}`} className="absolute inset-0 z-10" guaranteed={guaranteed} label={`Ad ${mid.i} of ${mid.t}`} onDone={() => setMid(null)} />
-    )}
+      <Player
+        hold={!!mid}
+        onAdBreak={adsOn ? (i, total) => setMid({ i, t: total }) : undefined}
+        ref={player}
+        key={id}
+        src={src ?? ""}
+        poster={v.thumbnail ?? undefined}
+        startTime={t ?? 0}
+        onTimeChange={setTime}
+        theater={theater}
+        onTheater={() => setTheater((t) => !t)}
+        onNext={
+          next && autoplay ? () => nav({ to: "/watch/$id", params: { id: next.id } }) : undefined
+        }
+      />
+      {mid && (
+        <PrerollAd
+          key={`mid-${mid.i}`}
+          className="absolute inset-0 z-10"
+          guaranteed={guaranteed}
+          label={`Ad ${mid.i} of ${mid.t}`}
+          onDone={() => setMid(null)}
+        />
+      )}
     </div>
   ) : (
-    <PrerollAd key={id} guaranteed={guaranteed} label={`Ad 1 of ${v.duration ? totalAds(v.duration) : 1}`} onDone={() => setAdDone(true)} />
+    <PrerollAd
+      key={id}
+      guaranteed={guaranteed}
+      label={`Ad 1 of ${v.duration ? totalAds(v.duration) : 1}`}
+      onDone={() => setAdDone(true)}
+    />
   );
 
   const sidebar = (
     <aside className="space-y-3">
       <AdSlot slot="adsterra_sidebar" className="rounded-xl border border-border p-2" />
       <Pills items={["All", `From ${c.name}`, v.category]} value={filter} onChange={setFilter} />
-      <label className="flex items-center justify-between py-2 text-sm font-medium">Autoplay<input type="checkbox" checked={autoplay} onChange={e => setAutoplay(e.target.checked)} aria-label="Autoplay" className="h-4 w-4 accent-primary" /></label>
-      {related.slice(0, 20).map((r) => <VideoRow key={r.id} v={r} compact />)}
+      <label className="flex items-center justify-between py-2 text-sm font-medium">
+        Autoplay
+        <input
+          type="checkbox"
+          checked={autoplay}
+          onChange={(e) => setAutoplay(e.target.checked)}
+          aria-label="Autoplay"
+          className="h-4 w-4 accent-primary"
+        />
+      </label>
+      {related.slice(0, 20).map((r) => (
+        <VideoRow key={r.id} v={r} compact />
+      ))}
     </aside>
   );
 
   const main = (
     <div className="min-w-0">
-      <h1 className="mt-3 font-display text-xl font-semibold leading-tight">{v.title}</h1>
+      <nav
+        aria-label="Breadcrumb"
+        className="mt-3 flex flex-wrap items-center gap-1 text-xs text-muted-foreground"
+      >
+        <Link to="/" className="hover:text-primary hover:underline">
+          Home
+        </Link>
+        <span aria-hidden="true">/</span>
+        <Link
+          to="/category/$category"
+          params={{ category: v.category.toLowerCase() }}
+          className="hover:text-primary hover:underline"
+        >
+          {v.category}
+        </Link>
+      </nav>
+      <h1 className="mt-2 font-display text-xl font-semibold leading-tight">{v.title}</h1>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <Link to="/channel/$handle" params={{ handle: c.handle }}><Avatar ch={c} className="h-10 w-10" /></Link>
+          <Link to="/channel/$handle" params={{ handle: c.handle }}>
+            <Avatar ch={c} className="h-10 w-10" />
+          </Link>
           <div>
-            <Link to="/channel/$handle" params={{ handle: c.handle }} className="font-semibold">{c.name}</Link>
+            <Link to="/channel/$handle" params={{ handle: c.handle }} className="font-semibold">
+              {c.name}
+            </Link>
             <p className="text-xs text-muted-foreground">{subs(c.subscribers)}</p>
           </div>
           <SubscribeButton channelId={c.id} />
@@ -175,29 +344,69 @@ function Watch() {
           <Button variant="secondary" onClick={() => setShare(true)}>
             <Share2 className="h-5 w-5" /> Share
           </Button>
-          <Button variant="secondary" disabled={!src || downloading} onClick={async () => {
-            if (!src) return;
-            setDownloading(true);
-            try {
-              const response = await fetch(src);
-              if (!response.ok) throw new Error("Download failed");
-              const blob = await response.blob();
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a"); a.href = url;
-              a.download = `${v.title.replace(/[\\/:*?"<>|]/g, "_")}.${v.videoPath.split(".").pop() || "mp4"}`;
-              document.body.append(a); a.click(); a.remove(); window.setTimeout(() => URL.revokeObjectURL(url), 60000);
-            } catch { toast.error("Couldn't download this video. Try again."); }
-            finally { setDownloading(false); }
-          }}><Download />{downloading ? "Downloading…" : "Download"}</Button>
-          <button onClick={() => req("save videos", () => setSave(true))} className="flex items-center gap-2 rounded-full bg-muted px-4 py-2 text-sm font-medium hover:bg-accent">
+          <Button
+            variant="secondary"
+            disabled={!src || downloading}
+            onClick={async () => {
+              if (!src) return;
+              setDownloading(true);
+              try {
+                const response = await fetch(src);
+                if (!response.ok) throw new Error("Download failed");
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `${v.title.replace(/[\\/:*?"<>|]/g, "_")}.${v.videoPath.split(".").pop() || "mp4"}`;
+                document.body.append(a);
+                a.click();
+                a.remove();
+                window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+              } catch {
+                toast.error("Couldn't download this video. Try again.");
+              } finally {
+                setDownloading(false);
+              }
+            }}
+          >
+            <Download />
+            {downloading ? "Downloading…" : "Download"}
+          </Button>
+          <button
+            onClick={() => req("save videos", () => setSave(true))}
+            className="flex items-center gap-2 rounded-full bg-muted px-4 py-2 text-sm font-medium hover:bg-accent"
+          >
             <Bookmark className="h-5 w-5" /> Save
           </button>
         </div>
       </div>
-      <div className="mt-4 flex flex-wrap gap-3 text-sm"><Link to="/category/$category" params={{ category: v.category.toLowerCase() }} className="text-primary hover:underline">{v.category}</Link>{v.fingerprint && <span className="text-muted-foreground">Watermarked · @{c.handle}</span>}</div>
-      <Description text={v.description} tags={v.tags} views={v.views} at={v.publishedAt} onSeek={(t) => player.current?.seek(t)} />
+      <div className="mt-4 flex flex-wrap gap-3 text-sm">
+        <Link
+          to="/category/$category"
+          params={{ category: v.category.toLowerCase() }}
+          className="text-primary hover:underline"
+        >
+          {v.category}
+        </Link>
+        {v.fingerprint && <span className="text-muted-foreground">Watermarked · @{c.handle}</span>}
+      </div>
+      <Description
+        text={v.description}
+        tags={v.tags}
+        views={v.views}
+        at={v.publishedAt}
+        onSeek={(t) => player.current?.seek(t)}
+      />
       <AdSlot slot="adsterra_native" className="mt-4 rounded-xl border border-border p-3" />
       <Comments videoId={id} />
+      <VideoLinks
+        title="More videos on ArinX"
+        videos={(loader?.catalog?.videos ?? [])
+          .filter((item: Video) => item.id !== id)
+          .slice(0, 16)
+          .map((item) => ({ id: item.id, title: item.title }))}
+        className="mt-8"
+      />
     </div>
   );
 
@@ -207,9 +416,7 @@ function Watch() {
       <ShareDialog id={id} title={v.title} time={time} open={share} onOpenChange={setShare} />
       {theater ? (
         <>
-          <div className="flex justify-center bg-overlay">
-            {playerEl}
-          </div>
+          <div className="flex justify-center bg-overlay">{playerEl}</div>
           <div className="mx-auto grid max-w-[1750px] gap-6 px-4 sm:px-6 lg:grid-cols-[1fr_400px]">
             {main}
             <div className="pt-4">{sidebar}</div>

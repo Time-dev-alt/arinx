@@ -12,4 +12,11 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  vite: {
+    server: {
+      // Dev only: allow the Arena/Lovable preview proxy hostnames to reach Vite.
+      // Has no effect on the production build or the synced deployment.
+      allowedHosts: true,
+    },
+  },
 });

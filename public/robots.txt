@@ -1,14 +1,19 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
-
+# https://arin-x.lovable.app — robots.txt
+# Only private surfaces and duplicate search results are blocked. Public watch
+# pages, embed players and thumbnail redirects stay reachable: Google needs the
+# player and image referenced by the video sitemap for video rich results, and
+# social crawlers need them for link previews. Embed pages carry a noindex tag
+# instead of a robots.txt block, which keeps them out of the index while still
+# letting crawlers verify the player.
 User-agent: *
 Allow: /
+Disallow: /admin
+Disallow: /auth
+Disallow: /studio
+Disallow: /library
+Disallow: /history
+Disallow: /playlist/
+Disallow: /results
+Disallow: /api/
+
+Sitemap: https://arin-x.lovable.app/sitemap.xml

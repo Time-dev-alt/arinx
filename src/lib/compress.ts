@@ -52,7 +52,9 @@ async function getFFmpeg(onProgress?: (ratio: number, stage: string) => void) {
       await ffmpeg.load({
         coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, "text/javascript"),
         wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, "application/wasm"),
-        ...(mt ? { workerURL: await toBlobURL(`${base}/ffmpeg-core.worker.js`, "text/javascript") } : {}),
+        ...(mt
+          ? { workerURL: await toBlobURL(`${base}/ffmpeg-core.worker.js`, "text/javascript") }
+          : {}),
       });
       return ffmpeg;
     })();
@@ -84,22 +86,28 @@ async function watermarkPng(text: string): Promise<Uint8Array> {
 /** Full-frame, near-invisible tiled layer carrying the fingerprint — survives re-encodes and crops. */
 async function invisiblePng(tag: string): Promise<Uint8Array> {
   const c = document.createElement("canvas");
-  c.width = 1280; c.height = 720;
+  c.width = 1280;
+  c.height = 720;
   const ctx = c.getContext("2d")!;
   ctx.font = "600 22px monospace";
   ctx.fillStyle = "rgba(255,255,255,0.025)";
   ctx.rotate(-0.35);
-  for (let y = -200; y < 1100; y += 90) for (let x = -400; x < 1600; x += tag.length * 14 + 80) ctx.fillText(tag, x, y);
+  for (let y = -200; y < 1100; y += 90)
+    for (let x = -400; x < 1600; x += tag.length * 14 + 80) ctx.fillText(tag, x, y);
   const blob = await new Promise<Blob>((r) => c.toBlob((b) => r(b!), "image/png"));
   return new Uint8Array(await blob.arrayBuffer());
 }
 
 function overlayPos(pos: string): string {
   switch (pos) {
-    case "top-left": return "24:24";
-    case "top-right": return "W-w-24:24";
-    case "bottom-left": return "24:H-h-24";
-    default: return "W-w-24:H-h-24";
+    case "top-left":
+      return "24:24";
+    case "top-right":
+      return "W-w-24:24";
+    case "bottom-left":
+      return "24:H-h-24";
+    default:
+      return "W-w-24:H-h-24";
   }
 }
 
@@ -113,13 +121,21 @@ export async function compressVideo(file: File, opts: CompressOptions): Promise<
   opts.onProgress?.(0, "Reading video…");
   await ffmpeg.writeFile("in", await fetchFile(file));
   const useImage = !!opts.watermarkImage;
-  await ffmpeg.writeFile("wm.png", useImage ? new Uint8Array(await opts.watermarkImage!.arrayBuffer()) : await watermarkPng(opts.watermarkText || "ArinX"));
+  await ffmpeg.writeFile(
+    "wm.png",
+    useImage
+      ? new Uint8Array(await opts.watermarkImage!.arrayBuffer())
+      : await watermarkPng(opts.watermarkText || "ArinX"),
+  );
   await ffmpeg.writeFile("inv.png", await invisiblePng(tag));
 
   let lastRatio = 0;
   const onP = ({ progress }: { progress: number }) => {
     const r = Math.max(0, Math.min(1, progress));
-    if (r - lastRatio > 0.02) { lastRatio = r; opts.onProgress?.(r, "Compressing & watermarking…"); }
+    if (r - lastRatio > 0.02) {
+      lastRatio = r;
+      opts.onProgress?.(r, "Compressing & watermarking…");
+    }
   };
   ffmpeg.on("progress", onP);
 
@@ -128,19 +144,44 @@ export async function compressVideo(file: File, opts: CompressOptions): Promise<
     `[0:v]scale='min(${p.maxWidth},iw)':-2[s]`,
     `[2:v][s]scale2ref[inv][s1]`,
     `[s1][inv]overlay=0:0[a]`,
-    useImage ? `[1:v]scale='min(200,iw)':-1,format=rgba,colorchannelmixer=aa=0.7[w]` : `[1:v]null[w]`,
+    useImage
+      ? `[1:v]scale='min(200,iw)':-1,format=rgba,colorchannelmixer=aa=0.7[w]`
+      : `[1:v]null[w]`,
     `[a][w]overlay=${overlayPos(opts.watermarkPosition)}[v]`,
   ].join(";");
   const args = [
-    "-i", "in", "-i", "wm.png", "-i", "inv.png",
-    "-filter_complex", graph,
-    "-map", "[v]", "-map", "0:a?",
-    "-c:v", "libx264", "-preset", "veryfast", "-crf", String(p.crf), "-pix_fmt", "yuv420p",
-    "-c:a", "aac", "-b:a", `${p.audioKbps}k`,
-    "-movflags", "+faststart",
-    "-metadata", `comment=arinx:wm:${fingerprint}`,
-    "-metadata", `copyright=${opts.ownerTag || opts.watermarkText || "ArinX"} via ArinX`,
-    "-metadata", `description=${tag}`,
+    "-i",
+    "in",
+    "-i",
+    "wm.png",
+    "-i",
+    "inv.png",
+    "-filter_complex",
+    graph,
+    "-map",
+    "[v]",
+    "-map",
+    "0:a?",
+    "-c:v",
+    "libx264",
+    "-preset",
+    "veryfast",
+    "-crf",
+    String(p.crf),
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "aac",
+    "-b:a",
+    `${p.audioKbps}k`,
+    "-movflags",
+    "+faststart",
+    "-metadata",
+    `comment=arinx:wm:${fingerprint}`,
+    "-metadata",
+    `copyright=${opts.ownerTag || opts.watermarkText || "ArinX"} via ArinX`,
+    "-metadata",
+    `description=${tag}`,
     "out.mp4",
   ];
   try {
@@ -152,9 +193,16 @@ export async function compressVideo(file: File, opts: CompressOptions): Promise<
     buf.set(bytes);
     const blob = new Blob([buf.buffer], { type: "video/mp4" });
     // Watermarks are mandatory, so the re-encoded file is always kept.
-    return { blob, originalSize: file.size, compressedSize: blob.size, fingerprint, compressed: true };
+    return {
+      blob,
+      originalSize: file.size,
+      compressedSize: blob.size,
+      fingerprint,
+      compressed: true,
+    };
   } finally {
     ffmpeg.off("progress", onP);
-    for (const f of ["in", "out.mp4", "wm.png", "inv.png"]) await ffmpeg.deleteFile(f).catch(() => {});
+    for (const f of ["in", "out.mp4", "wm.png", "inv.png"])
+      await ffmpeg.deleteFile(f).catch(() => {});
   }
 }

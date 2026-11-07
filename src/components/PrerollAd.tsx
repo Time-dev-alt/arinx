@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ExternalLink, Volume2, VolumeX } from "lucide-react";
 import { useSiteSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
+import { safeExternalUrl, safeHttpsUrl } from "@/lib/watch-tools";
 
 type VastAd = {
   mediaUrl: string;
@@ -10,6 +11,8 @@ type VastAd = {
   trackImpression: () => void;
   trackClick: () => void;
 };
+
+const VAST_TIMEOUT_MS = 8_000;
 
 /** Parses "HH:MM:SS(.mmm)", "SS%", or plain seconds into a number of seconds. */
 export function parseSkipOffset(offset: string | null | undefined, duration: number): number {
@@ -25,26 +28,40 @@ export function parseSkipOffset(offset: string | null | undefined, duration: num
   return parts[0];
 }
 
-/** Fetches a VAST tag and extracts the first playable linear creative. */
+/** Fetches an HTTPS VAST tag and extracts the first playable, safe linear creative. */
 async function loadVastAd(tagUrl: string): Promise<VastAd | null> {
+  const safeTag = safeHttpsUrl(tagUrl);
+  if (!safeTag) return null;
   const { VASTClient, VASTTracker } = await import("@dailymotion/vast-client");
   const client = new VASTClient();
-  const response = await client.get(tagUrl, { withCredentials: false, resolveAll: true });
+  const response = await Promise.race([
+    client.get(safeTag, { withCredentials: false, resolveAll: true }),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("VAST tag timed out")), VAST_TIMEOUT_MS),
+    ),
+  ]);
   for (const ad of response.ads ?? []) {
     for (const creative of ad.creatives ?? []) {
       if (creative.type !== "linear") continue;
-      type MediaFile = { fileURL?: string; deliveryType?: string; mimeType?: string; bitrate?: number };
+      type MediaFile = {
+        fileURL?: string;
+        deliveryType?: string;
+        mimeType?: string;
+        bitrate?: number;
+      };
       const media = ((creative.mediaFiles ?? []) as MediaFile[])
         .filter((m) => m.fileURL && (m.deliveryType === "progressive" || !m.deliveryType))
         .sort((a, b) => {
           const mp4 = (m: MediaFile) => (m.mimeType === "video/mp4" ? 0 : 1);
           return mp4(a) - mp4(b) || (a.bitrate ?? 0) - (b.bitrate ?? 0);
         })[0];
-      if (!media?.fileURL) continue;
+      // Ad-network responses are untrusted: only http(s) media and links pass.
+      const mediaUrl = safeExternalUrl(media?.fileURL);
+      if (!mediaUrl) continue;
       const tracker = new VASTTracker(client, ad, creative);
       return {
-        mediaUrl: media.fileURL,
-        clickUrl: creative.videoClickThroughURLTemplate?.url ?? null,
+        mediaUrl,
+        clickUrl: safeExternalUrl(creative.videoClickThroughURLTemplate?.url),
         skipSeconds: parseSkipOffset(creative.skipOffset, creative.duration ?? 0),
         trackImpression: () => tracker.trackImpression(),
         trackClick: () => tracker.click(),
@@ -59,50 +76,97 @@ async function loadVastAd(tagUrl: string): Promise<VastAd | null> {
  * Supports a direct sponsor video URL or any VAST ad-network tag,
  * configured in the owner admin panel (Monetization tab).
  */
-export function PrerollAd({ onDone, className, guaranteed = 0, label = "Ad" }: { onDone: () => void; className?: string; guaranteed?: number; label?: string }) {
-  const { data: s } = useSiteSettings();
+export function PrerollAd({
+  onDone,
+  className,
+  guaranteed = 0,
+  label = "Ad",
+}: {
+  onDone: () => void;
+  className?: string;
+  guaranteed?: number;
+  label?: string;
+}) {
+  const { data: s, isPending: settingsPending } = useSiteSettings();
   const vid = useRef<HTMLVideoElement>(null);
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
   const [left, setLeft] = useState(0);
   const [muted, setMuted] = useState(true);
   const [vast, setVast] = useState<VastAd | null>(null);
   const [vastFailed, setVastFailed] = useState(false);
   const impressionTracked = useRef(false);
 
-  const useVast = !!(s?.ads_enabled && s.preroll_enabled && s.preroll_vast_url);
-  const useDirect = !!(s?.ads_enabled && s.preroll_enabled && s.preroll_video_url);
+  const vastTag = safeHttpsUrl(s?.preroll_vast_url);
+  const directSrc = safeExternalUrl(s?.preroll_video_url);
+  const clickSetting = safeExternalUrl(s?.preroll_click_url);
+  const useVast = !!(s?.ads_enabled && s.preroll_enabled && vastTag);
+  const useDirect = !!(s?.ads_enabled && s.preroll_enabled && directSrc);
   const active = useVast || useDirect;
 
   useEffect(() => {
-    if (!useVast || !s?.preroll_vast_url) return;
+    if (!useVast || !vastTag) return;
     let cancelled = false;
-    loadVastAd(s.preroll_vast_url)
-      .then((ad) => { if (!cancelled) setVast(ad); if (!cancelled && !ad) setVastFailed(true); })
-      .catch(() => { if (!cancelled) setVastFailed(true); });
-    return () => { cancelled = true; };
-  }, [useVast, s?.preroll_vast_url]);
+    loadVastAd(vastTag)
+      .then((ad) => {
+        if (cancelled) return;
+        setVast(ad);
+        if (!ad) setVastFailed(true);
+      })
+      .catch(() => {
+        if (!cancelled) setVastFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [useVast, vastTag]);
 
+  // Wait until the settings query has settled before deciding there is no ad.
+  // Previously `active` was false on the very first render (settings not yet
+  // loaded), which skipped ads permanently even when they were enabled.
   useEffect(() => {
-    if (!active) onDone();
-  }, [active, onDone]);
+    if (!settingsPending && !active) onDoneRef.current();
+  }, [settingsPending, active, s]);
+
+  const noPlayableAd = !!(active && useVast && vastFailed && !vast && !directSrc);
+  useEffect(() => {
+    if (noPlayableAd) onDoneRef.current();
+  }, [noPlayableAd]);
 
   if (!active || !s) return null;
 
   // VAST takes priority; fall back to the direct sponsor video when the tag fails or is empty.
-  const src = useVast ? (vast?.mediaUrl ?? (vastFailed ? s.preroll_video_url : null)) : s.preroll_video_url;
-  const clickUrl = useVast && vast ? vast.clickUrl ?? s.preroll_click_url : s.preroll_click_url;
-  const skipAt = Math.max(0, guaranteed, useVast && vast ? vast.skipSeconds : s.preroll_skip_seconds);
+  const src = useVast ? (vast?.mediaUrl ?? (vastFailed ? directSrc : null)) : directSrc;
+  const clickUrl = useVast && vast ? (vast.clickUrl ?? clickSetting) : clickSetting;
+  const skipAt = Math.min(
+    60,
+    Math.max(0, guaranteed, useVast && vast ? vast.skipSeconds : s.preroll_skip_seconds),
+  );
 
   if (!src) {
-    // VAST tag still loading — show a quiet placeholder instead of the player.
+    if (vastFailed) {
+      // No playable creative and no fallback: never trap the viewer on an ad.
+      return null;
+    }
     return (
-      <div className={cn("relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl bg-overlay", className)}>
+      <div
+        className={cn(
+          "relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl bg-overlay",
+          className,
+        )}
+      >
         <span className="text-xs text-overlay-foreground/60">Loading ad…</span>
       </div>
     );
   }
 
   return (
-    <div className={cn("relative aspect-video w-full overflow-hidden rounded-xl bg-overlay", className)}>
+    <div
+      className={cn(
+        "relative aspect-video w-full overflow-hidden rounded-xl bg-overlay",
+        className,
+      )}
+    >
       <video
         ref={vid}
         src={src}
@@ -117,10 +181,12 @@ export function PrerollAd({ onDone, className, guaranteed = 0, label = "Ad" }: {
           }
         }}
         onTimeUpdate={(e) => setLeft(e.currentTarget.currentTime)}
-        onEnded={onDone}
-        onError={onDone}
+        onEnded={() => onDoneRef.current()}
+        onError={() => onDoneRef.current()}
       />
-      <span className="absolute left-3 top-3 rounded bg-overlay/80 px-2 py-0.5 text-xs font-medium text-overlay-foreground">{label}</span>
+      <span className="absolute left-3 top-3 rounded bg-overlay/80 px-2 py-0.5 text-xs font-medium text-overlay-foreground">
+        {label}
+      </span>
       <button
         onClick={() => setMuted((m) => !m)}
         aria-label={muted ? "Unmute ad" : "Mute ad"}
@@ -140,7 +206,7 @@ export function PrerollAd({ onDone, className, guaranteed = 0, label = "Ad" }: {
         </a>
       )}
       <button
-        onClick={onDone}
+        onClick={() => onDoneRef.current()}
         disabled={left < skipAt}
         className="absolute bottom-3 right-3 rounded-full bg-overlay/80 px-4 py-1.5 text-sm font-medium text-overlay-foreground hover:bg-overlay disabled:cursor-not-allowed disabled:opacity-60"
       >
