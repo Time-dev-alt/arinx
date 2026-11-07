@@ -1,6 +1,7 @@
 # ArinX visitor and creator update
-- [ ] Growth package: discover feed modes, rising creators, category links, trending periods, expanded sharing, channel sharing, content-specific SEO, sitemap, IP receipts, and 1,000-subscriber eligibility.
-- [ ] Fix flagged file-read policy while preserving published media access.
+- [x] Growth package: discover feed modes, rising creators, category links, trending periods, expanded sharing, channel sharing, content-specific SEO, sitemap, IP receipts, and 1,000-subscriber eligibility.
+  - SEO follow-up: SSR public catalog/`initialData`, per-route canonicals and JSON-LD, dynamic video sitemap at `/sitemap.xml`, crawler directives at `/robots.txt`, stable thumbnail URLs, branded OG/wordmark assets, and crawlable category/creator/video link sections.
+- [x] Fix flagged file-read policy while preserving published media access (`drizzle/migrations/0011_harden_public_content.sql`: storage.objects and comments SELECT policies now require published videos; added a partial index for public feed reads).
 - [x] Downloads, timestamp sharing, embeddable playback, shortcuts and autoplay control.
 - [x] Channel social links and reliable thumbnail/metadata selection.
 - [x] Reliable compression/watermark processing and upload cleanup.

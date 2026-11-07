@@ -10,7 +10,7 @@ import { startSeconds } from "@/lib/watch-tools";
 export const Route = createFileRoute("/embed/$id")({
   validateSearch: (search: Record<string, unknown>): { t?: number } =>
     search.t === undefined ? {} : { t: startSeconds(search.t) },
-  head: () => pageHead("Embedded video", "Embedded video playback on ArinX."),
+  head: () => pageHead("Embedded video", "Embedded video playback on ArinX.", { noindex: true }),
   component: Embed,
 });
 
@@ -22,5 +22,13 @@ function Embed() {
   const [finishedAd, setFinishedAd] = useState<string | null>(null);
   if (isLoading) return <div className="aspect-video animate-pulse bg-muted" />;
   if (!video) return <p className="p-6 text-center text-muted-foreground">Video unavailable</p>;
-  return <div className="flex min-h-screen items-center bg-overlay">{finishedAd === id ? <Player key={id} src={src ?? ""} poster={video.thumbnail ?? undefined} startTime={t ?? 0} /> : <PrerollAd key={id} onDone={() => setFinishedAd(id)} />}</div>;
+  return (
+    <div className="flex min-h-screen items-center bg-overlay">
+      {finishedAd === id ? (
+        <Player key={id} src={src ?? ""} poster={video.thumbnail ?? undefined} startTime={t ?? 0} />
+      ) : (
+        <PrerollAd key={id} onDone={() => setFinishedAd(id)} />
+      )}
+    </div>
+  );
 }

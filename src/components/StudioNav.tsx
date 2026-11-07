@@ -12,7 +12,16 @@ export function StudioNav() {
     <div className="mb-6 flex flex-wrap items-center gap-2">
       <span className="mr-4 font-display text-2xl font-bold">Studio</span>
       {items.map((i) => (
-        <Link key={i.to} to={i.to} className={cn("rounded-full px-4 py-1.5 text-sm font-medium", path.replace(/\/$/, "") === i.to ? "bg-foreground text-background" : "bg-muted hover:bg-accent")}>
+        <Link
+          key={i.to}
+          to={i.to}
+          className={cn(
+            "rounded-full px-4 py-1.5 text-sm font-medium",
+            path.replace(/\/$/, "") === i.to
+              ? "bg-foreground text-background"
+              : "bg-muted hover:bg-accent",
+          )}
+        >
           {i.label}
         </Link>
       ))}

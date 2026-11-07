@@ -25,8 +25,21 @@ const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
 export const Player = forwardRef<
   PlayerHandle,
-  { src: string; poster?: string; theater?: boolean; onTheater?: () => void; onNext?: () => void; startTime?: number; onTimeChange?: (time: number) => void; hold?: boolean; onAdBreak?: (index: number, total: number) => void }
->(function Player({ src, poster, theater, onTheater, onNext, startTime = 0, onTimeChange, hold = false, onAdBreak }, ref) {
+  {
+    src: string;
+    poster?: string;
+    theater?: boolean;
+    onTheater?: () => void;
+    onNext?: () => void;
+    startTime?: number;
+    onTimeChange?: (time: number) => void;
+    hold?: boolean;
+    onAdBreak?: (index: number, total: number) => void;
+  }
+>(function Player(
+  { src, poster, theater, onTheater, onNext, startTime = 0, onTimeChange, hold = false, onAdBreak },
+  ref,
+) {
   const url = src;
   const wrap = useRef<HTMLDivElement>(null);
   const vid = useRef<HTMLVideoElement>(null);
@@ -59,13 +72,20 @@ export const Player = forwardRef<
   }, [hold]);
 
   // Trigger a mid-roll once playback reaches (or is scrubbed past) the next break.
+  // Compute the schedule inside the effect so a duration change can never leave
+  // a stale break list behind.
   useEffect(() => {
     if (!onAdBreak || hold) return;
-    const i = breaks.findIndex((b, idx) => !played.current.has(idx) && b > startTime && time >= b);
+    const schedule = midrollTimes(dur);
+    const i = schedule.findIndex(
+      (b, idx) => !played.current.has(idx) && b > startTime && time >= b,
+    );
     if (i < 0) return;
-    breaks.forEach((b, idx) => { if (b <= time) played.current.add(idx); });
-    onAdBreak(i + 2, breaks.length + 1);
-  }, [time, hold]);
+    schedule.forEach((b, idx) => {
+      if (b <= time) played.current.add(idx);
+    });
+    onAdBreak(i + 2, schedule.length + 1);
+  }, [time, hold, dur, startTime, onAdBreak]);
 
   useImperativeHandle(ref, () => ({
     seek: (t) => {
@@ -79,7 +99,8 @@ export const Player = forwardRef<
   const toggle = () => {
     const v = vid.current;
     if (!v) return;
-    v.paused ? void v.play().catch(() => {}) : v.pause();
+    if (v.paused) void v.play().catch(() => {});
+    else v.pause();
   };
   const poke = () => {
     setActive(true);
@@ -110,16 +131,32 @@ export const Player = forwardRef<
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (e.target as HTMLElement)?.isContentEditable || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.key === "?") { setShortcuts(x => !x); return; }
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        (e.target as HTMLElement)?.isContentEditable ||
+        e.ctrlKey ||
+        e.metaKey ||
+        e.altKey
+      )
+        return;
+      if (e.key === "?") {
+        setShortcuts((x) => !x);
+        return;
+      }
       if (document.querySelector('[role="dialog"]')) return;
       const v = vid.current;
       if (!v) return;
       const k = e.key.toLowerCase();
-      if (k === " " || k === "k") { e.preventDefault(); toggle(); }
-      else if (k === "f") fullscreen();
-      else if (k === "m") { v.muted = !v.muted; setMuted(v.muted); }
-      else if (k === "t") onTheater?.();
+      if (k === " " || k === "k") {
+        e.preventDefault();
+        toggle();
+      } else if (k === "f") fullscreen();
+      else if (k === "m") {
+        v.muted = !v.muted;
+        setMuted(v.muted);
+      } else if (k === "t") onTheater?.();
       else if (k === "i") pip();
       else if (k === "arrowright" || k === "l") v.currentTime += k === "l" ? 10 : 5;
       else if (k === "arrowleft" || k === "j") v.currentTime -= k === "j" ? 10 : 5;
@@ -131,7 +168,8 @@ export const Player = forwardRef<
   });
 
   const seekFromEvent = (clientX: number) => {
-    const b = bar.current, v = vid.current;
+    const b = bar.current,
+      v = vid.current;
     if (!b || !v || !dur) return;
     const r = b.getBoundingClientRect();
     v.currentTime = Math.min(1, Math.max(0, (clientX - r.left) / r.width)) * dur;
@@ -144,7 +182,11 @@ export const Player = forwardRef<
       ref={wrap}
       onMouseMove={poke}
       onMouseLeave={() => playing && setActive(false)}
-      className={cn("group relative w-full overflow-hidden bg-overlay", fs ? "h-full" : theater ? "aspect-video max-h-[75vh]" : "aspect-video rounded-xl", !showUI && "cursor-none")}
+      className={cn(
+        "group relative w-full overflow-hidden bg-overlay",
+        fs ? "h-full" : theater ? "aspect-video max-h-[75vh]" : "aspect-video rounded-xl",
+        !showUI && "cursor-none",
+      )}
     >
       <video
         ref={vid}
@@ -157,18 +199,67 @@ export const Player = forwardRef<
         onDoubleClick={fullscreen}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
-        onTimeUpdate={(e) => { setTime(e.currentTarget.currentTime); onTimeChange?.(e.currentTarget.currentTime); }}
-        onLoadedMetadata={(e) => { setError(false); setDur(e.currentTarget.duration); e.currentTarget.playbackRate = speed; if (startTime > 0) e.currentTarget.currentTime = Math.min(startTime, Math.max(0, e.currentTarget.duration - 0.1)); }}
+        onTimeUpdate={(e) => {
+          setTime(e.currentTarget.currentTime);
+          onTimeChange?.(e.currentTarget.currentTime);
+        }}
+        onLoadedMetadata={(e) => {
+          setError(false);
+          setDur(e.currentTarget.duration);
+          e.currentTarget.playbackRate = speed;
+          if (startTime > 0)
+            e.currentTarget.currentTime = Math.min(
+              startTime,
+              Math.max(0, e.currentTarget.duration - 0.1),
+            );
+        }}
         onError={() => setError(true)}
         onProgress={(e) => {
           const b = e.currentTarget.buffered;
           if (b.length) setBuffered(b.end(b.length - 1));
         }}
-        onVolumeChange={(e) => { setVol(e.currentTarget.volume); setMuted(e.currentTarget.muted); }}
+        onVolumeChange={(e) => {
+          setVol(e.currentTarget.volume);
+          setMuted(e.currentTarget.muted);
+        }}
         onEnded={() => onNext?.()}
       />
-      <Dialog open={shortcuts} onOpenChange={setShortcuts}><DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-sm"><DialogTitle>Playback shortcuts</DialogTitle><DialogDescription>Keyboard controls</DialogDescription><dl className="grid grid-cols-2 gap-3 text-sm">{[["Space / K", "Play or pause"], ["J / L", "Back / forward 10s"], ["← / →", "Back / forward 5s"], ["M", "Mute"], ["F", "Full screen"], ["T", "Theater mode"], ["I", "Picture in picture"]].map(([key, label]) => <div key={key} className="contents"><dt className="font-mono text-primary">{key}</dt><dd>{label}</dd></div>)}</dl></DialogContent></Dialog>
-      {error && <div className="absolute inset-0 grid place-content-center gap-3 bg-overlay text-center text-overlay-foreground"><p>Unable to play this video</p><Button variant="secondary" onClick={() => { setError(false); vid.current?.load(); }}>Retry</Button></div>}
+      <Dialog open={shortcuts} onOpenChange={setShortcuts}>
+        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-sm">
+          <DialogTitle>Playback shortcuts</DialogTitle>
+          <DialogDescription>Keyboard controls</DialogDescription>
+          <dl className="grid grid-cols-2 gap-3 text-sm">
+            {[
+              ["Space / K", "Play or pause"],
+              ["J / L", "Back / forward 10s"],
+              ["← / →", "Back / forward 5s"],
+              ["M", "Mute"],
+              ["F", "Full screen"],
+              ["T", "Theater mode"],
+              ["I", "Picture in picture"],
+            ].map(([key, label]) => (
+              <div key={key} className="contents">
+                <dt className="font-mono text-primary">{key}</dt>
+                <dd>{label}</dd>
+              </div>
+            ))}
+          </dl>
+        </DialogContent>
+      </Dialog>
+      {error && (
+        <div className="absolute inset-0 grid place-content-center gap-3 bg-overlay text-center text-overlay-foreground">
+          <p>Unable to play this video</p>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setError(false);
+              vid.current?.load();
+            }}
+          >
+            Retry
+          </Button>
+        </div>
+      )}
 
       {adIn > 0 && adIn <= AD_COUNTDOWN && !hold && (
         <div className="absolute bottom-20 right-3 rounded-md bg-overlay/85 px-3 py-1.5 text-sm font-medium text-overlay-foreground">
@@ -176,12 +267,21 @@ export const Player = forwardRef<
         </div>
       )}
       {!playing && !error && !hold && (
-        <button onClick={toggle} aria-label="Play" className="absolute left-1/2 top-1/2 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-overlay/60 text-overlay-foreground">
+        <button
+          onClick={toggle}
+          aria-label="Play"
+          className="absolute left-1/2 top-1/2 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-overlay/60 text-overlay-foreground"
+        >
           <Play className="h-8 w-8 fill-current" />
         </button>
       )}
 
-      <div className={cn("absolute inset-x-0 bottom-0 bg-gradient-to-t from-overlay/90 to-transparent px-3 pb-2 pt-10 text-overlay-foreground transition-opacity", showUI ? "opacity-100" : "opacity-0")}>
+      <div
+        className={cn(
+          "absolute inset-x-0 bottom-0 bg-gradient-to-t from-overlay/90 to-transparent px-3 pb-2 pt-10 text-overlay-foreground transition-opacity",
+          showUI ? "opacity-100" : "opacity-0",
+        )}
+      >
         <div
           ref={bar}
           className="group/bar relative h-4 cursor-pointer"
@@ -197,33 +297,71 @@ export const Player = forwardRef<
           onPointerLeave={() => setHover(null)}
         >
           <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded bg-overlay-foreground/25 transition-all group-hover/bar:h-1.5">
-            <div className="absolute inset-y-0 left-0 rounded bg-overlay-foreground/40" style={{ width: `${dur ? (buffered / dur) * 100 : 0}%` }} />
-            <div className="absolute inset-y-0 left-0 rounded bg-primary" style={{ width: `${dur ? (time / dur) * 100 : 0}%` }} />
+            <div
+              className="absolute inset-y-0 left-0 rounded bg-overlay-foreground/40"
+              style={{ width: `${dur ? (buffered / dur) * 100 : 0}%` }}
+            />
+            <div
+              className="absolute inset-y-0 left-0 rounded bg-primary"
+              style={{ width: `${dur ? (time / dur) * 100 : 0}%` }}
+            />
           </div>
-          {dur > 0 && breaks.map((b) => (
-            <span key={b} className="pointer-events-none absolute top-1/2 h-1.5 w-1 -translate-y-1/2 bg-ad-marker" style={{ left: `${(b / dur) * 100}%` }} />
-          ))}
-          <div className="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 scale-0 rounded-full bg-primary transition group-hover/bar:scale-100" style={{ left: `${dur ? (time / dur) * 100 : 0}%` }} />
+          {dur > 0 &&
+            breaks.map((b) => (
+              <span
+                key={b}
+                className="pointer-events-none absolute top-1/2 h-1.5 w-1 -translate-y-1/2 bg-ad-marker"
+                style={{ left: `${(b / dur) * 100}%` }}
+              />
+            ))}
+          <div
+            className="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 scale-0 rounded-full bg-primary transition group-hover/bar:scale-100"
+            style={{ left: `${dur ? (time / dur) * 100 : 0}%` }}
+          />
           {hover !== null && dur > 0 && (
-            <span className="absolute -top-7 -translate-x-1/2 rounded bg-overlay/90 px-1.5 py-0.5 text-xs" style={{ left: `${hover * 100}%` }}>
+            <span
+              className="absolute -top-7 -translate-x-1/2 rounded bg-overlay/90 px-1.5 py-0.5 text-xs"
+              style={{ left: `${hover * 100}%` }}
+            >
               {fmt(hover * dur)}
             </span>
           )}
         </div>
         <div className="flex items-center gap-1 text-sm">
-          <button onClick={toggle} aria-label={playing ? "Pause" : "Play"} className="rounded p-1.5 hover:bg-overlay-foreground/10">
-            {playing ? <Pause className="h-5 w-5 fill-current" /> : <Play className="h-5 w-5 fill-current" />}
+          <button
+            onClick={toggle}
+            aria-label={playing ? "Pause" : "Play"}
+            className="rounded p-1.5 hover:bg-overlay-foreground/10"
+          >
+            {playing ? (
+              <Pause className="h-5 w-5 fill-current" />
+            ) : (
+              <Play className="h-5 w-5 fill-current" />
+            )}
           </button>
           {onNext && (
-            <button onClick={onNext} aria-label="Next" className="rounded p-1.5 hover:bg-overlay-foreground/10"><SkipForward className="h-5 w-5 fill-current" /></button>
+            <button
+              onClick={onNext}
+              aria-label="Next"
+              className="rounded p-1.5 hover:bg-overlay-foreground/10"
+            >
+              <SkipForward className="h-5 w-5 fill-current" />
+            </button>
           )}
           <div className="group/vol flex items-center">
             <button
               aria-label={muted ? "Unmute" : "Mute"}
-              onClick={() => { const v = vid.current; if (v) v.muted = !v.muted; }}
+              onClick={() => {
+                const v = vid.current;
+                if (v) v.muted = !v.muted;
+              }}
               className="rounded p-1.5 hover:bg-overlay-foreground/10"
             >
-              {muted || vol === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+              {muted || vol === 0 ? (
+                <VolumeX className="h-5 w-5" />
+              ) : (
+                <Volume2 className="h-5 w-5" />
+              )}
             </button>
             <input
               type="range"
@@ -232,14 +370,26 @@ export const Player = forwardRef<
               step={0.01}
               aria-label="Volume"
               value={muted ? 0 : vol}
-              onChange={(e) => { const v = vid.current; if (v) { v.volume = Number(e.target.value); v.muted = v.volume === 0; } }}
+              onChange={(e) => {
+                const v = vid.current;
+                if (v) {
+                  v.volume = Number(e.target.value);
+                  v.muted = v.volume === 0;
+                }
+              }}
               className="w-0 accent-primary transition-all group-hover/vol:w-20"
             />
           </div>
-          <span className="ml-2 tabular-nums">{fmt(time)} / {fmt(dur)}</span>
+          <span className="ml-2 tabular-nums">
+            {fmt(time)} / {fmt(dur)}
+          </span>
           <div className="flex-1" />
           <div className="relative">
-            <button onClick={() => setMenu((m) => !m)} aria-label="Playback speed" className="flex items-center gap-1 rounded p-1.5 hover:bg-overlay-foreground/10">
+            <button
+              onClick={() => setMenu((m) => !m)}
+              aria-label="Playback speed"
+              className="flex items-center gap-1 rounded p-1.5 hover:bg-overlay-foreground/10"
+            >
               <Settings className="h-5 w-5" />
               {speed !== 1 && <span className="text-xs">{speed}x</span>}
             </button>
@@ -249,8 +399,15 @@ export const Player = forwardRef<
                 {SPEEDS.map((sp) => (
                   <button
                     key={sp}
-                    onClick={() => { setSpeed(sp); if (vid.current) vid.current.playbackRate = sp; setMenu(false); }}
-                    className={cn("block w-full px-3 py-1 text-left hover:bg-overlay-foreground/10", sp === speed && "text-primary")}
+                    onClick={() => {
+                      setSpeed(sp);
+                      if (vid.current) vid.current.playbackRate = sp;
+                      setMenu(false);
+                    }}
+                    className={cn(
+                      "block w-full px-3 py-1 text-left hover:bg-overlay-foreground/10",
+                      sp === speed && "text-primary",
+                    )}
                   >
                     {sp === 1 ? "Normal" : `${sp}x`}
                   </button>
@@ -258,11 +415,27 @@ export const Player = forwardRef<
               </div>
             )}
           </div>
-          <button onClick={pip} aria-label="Picture in picture" className="rounded p-1.5 hover:bg-overlay-foreground/10"><PictureInPicture2 className="h-5 w-5" /></button>
+          <button
+            onClick={pip}
+            aria-label="Picture in picture"
+            className="rounded p-1.5 hover:bg-overlay-foreground/10"
+          >
+            <PictureInPicture2 className="h-5 w-5" />
+          </button>
           {onTheater && !fs && (
-            <button onClick={onTheater} aria-label="Theater mode" className="hidden rounded p-1.5 hover:bg-overlay-foreground/10 lg:block"><RectangleHorizontal className="h-5 w-5" /></button>
+            <button
+              onClick={onTheater}
+              aria-label="Theater mode"
+              className="hidden rounded p-1.5 hover:bg-overlay-foreground/10 lg:block"
+            >
+              <RectangleHorizontal className="h-5 w-5" />
+            </button>
           )}
-          <button onClick={fullscreen} aria-label="Full screen" className="rounded p-1.5 hover:bg-overlay-foreground/10">
+          <button
+            onClick={fullscreen}
+            aria-label="Full screen"
+            className="rounded p-1.5 hover:bg-overlay-foreground/10"
+          >
             {fs ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
           </button>
         </div>

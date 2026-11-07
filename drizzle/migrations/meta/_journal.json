@@ -78,6 +78,13 @@
       "when": 1793700965798,
       "tag": "0010_creator_monetization_eligibility",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794058000000,
+      "tag": "0011_harden_public_content",
+      "breakpoints": true
     }
   ]
 }
