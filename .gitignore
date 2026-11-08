@@ -10,6 +10,18 @@ lerna-debug.log*
 node_modules
 package-lock.json
 dist
+
+# Local secret overrides. The tracked .env contains only public publishable
+# keys; never add service-role/secret keys to any committed env file.
+.env.local
+.env.*.local
+.env.production
+.env.development
+.env.test
+!.env.example
+*.pem
+*.p12
+*.pfx
 dist-ssr
 .output
 .vinxi

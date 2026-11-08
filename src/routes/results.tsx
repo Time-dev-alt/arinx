@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Empty, ShortCard, VideoRow } from "@/components/VideoCard";
 import { Avatar, Loading, SubscribeButton } from "@/components/common";
 import { compact, pageHead } from "@/lib/format";
+import { cleanMetaText } from "@/lib/seo";
 import { publicVideosQuery, searchChannelsQuery } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { publicCatalog } from "@/lib/catalog.functions";
@@ -90,8 +91,14 @@ function Results() {
   const set = (k: keyof Search, val: string) =>
     nav({ to: "/results", search: { ...search, [k]: val } });
 
+  const term = cleanMetaText(q, 80);
+  const heading = term ? `Results for “${term}”` : "Search results";
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-4 pb-12">
+      {/* One descriptive h1 per page, even on this intentionally noindex
+          surface — it is an accessibility and heading-structure requirement. */}
+      <h1 className="font-display mb-3 text-2xl font-bold">{heading}</h1>
       <button
         onClick={() => setShowF((x) => !x)}
         className="flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium hover:bg-accent"

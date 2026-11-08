@@ -61,10 +61,28 @@ const ChartContainer = React.forwardRef<
 });
 ChartContainer.displayName = "Chart";
 
-const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
-  const colorConfig = Object.entries(config).filter(([, config]) => config.theme || config.color);
+// The generated stylesheet is the only innerHTML sink in the UI kit. Keep it
+// inert even if a chart config ever becomes user-supplied: identifiers may only
+// contain word characters and colour values must not contain CSS delimiters.
+const safeCssIdent = (value: string) => (/^[A-Za-z0-9_-]+$/.test(value) ? value : "");
+/** Allowlist rather than a blacklist: CSS colour values need a tiny alphabet,
+ * and anything outside it (semicolons, braces, slashes, quotes, backslashes)
+ * could close the rule or inject a new one. */
+const safeCssValue = (value: string) => {
+  const text = String(value ?? "").trim();
+  if (!text || text.length > 120) return "";
+  if (!/^[#A-Za-z0-9\s.,%()+-]+$/.test(text)) return "";
+  if (/url\(|@import|expression\(/i.test(text)) return "";
+  return text;
+};
 
-  if (!colorConfig.length) {
+const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
+  const chartId = safeCssIdent(id);
+  const colorConfig = Object.entries(config)
+    .filter(([key, itemConfig]) => safeCssIdent(key) && (itemConfig.theme || itemConfig.color))
+    .map(([key, itemConfig]) => ({ key: safeCssIdent(key), itemConfig }));
+
+  if (!colorConfig.length || !chartId) {
     return null;
   }
 
@@ -74,12 +92,14 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
         __html: Object.entries(THEMES)
           .map(
             ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
+${prefix} [data-chart=${chartId}] {
 ${colorConfig
-  .map(([key, itemConfig]) => {
+  .map(({ key, itemConfig }) => {
     const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
-    return color ? `  --color-${key}: ${color};` : null;
+    const value = color ? safeCssValue(String(color)) : "";
+    return value ? `  --color-${key}: ${value};` : null;
   })
+  .filter(Boolean)
   .join("\n")}
 }
 `,

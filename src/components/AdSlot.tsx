@@ -18,10 +18,15 @@ const SCRIPT_ATTRS = new Set([
 ]);
 
 /**
- * Renders an owner-supplied ad snippet. The markup is allowlisted first (see
- * sanitizeAdMarkup) so an injected `<img onerror>`, `javascript:` URL or
- * arbitrary inline script can never become stored XSS. Scripts are re-created
- * so dynamic ad tags still execute.
+ * Renders an owner-supplied ad snippet.
+ *
+ * Two independent barriers:
+ *  1. `sanitizeAdMarkup` allowlists the stored HTML (no event handlers,
+ *     iframes, javascript:/data: URLs or arbitrary inline JS).
+ *  2. The result is imported as DOM nodes — `innerHTML` is never used, so even
+ *     a sanitizer regression cannot turn the payload into a live DOM sink.
+ * Scripts are intentionally recreated (imported scripts are inert) with the
+ * same allowlist, and inherit the document CSP nonce when one is present.
  */
 export function AdSlot({ slot, className }: { slot: Slot; className?: string }) {
   const { data } = useSiteSettings();
@@ -31,22 +36,36 @@ export function AdSlot({ slot, className }: { slot: Slot; className?: string }) 
 
   useEffect(() => {
     const el = ref.current;
-    if (!el || !safeHtml) return;
-    el.innerHTML = safeHtml;
-    el.querySelectorAll("script").forEach((old) => {
-      const s = document.createElement("script");
-      for (const a of Array.from(old.attributes)) {
-        const name = a.name.toLowerCase();
+    if (!el || !safeHtml || typeof DOMParser === "undefined") {
+      el?.replaceChildren();
+      return;
+    }
+
+    const parsed = new DOMParser().parseFromString(`<div>${safeHtml}</div>`, "text/html");
+    const root = parsed.body.firstElementChild;
+    if (!root) return;
+    const fragment = document.createDocumentFragment();
+    for (const node of Array.from(root.childNodes)) {
+      fragment.appendChild(document.importNode(node, true));
+    }
+
+    const nonce =
+      document.querySelector<HTMLMetaElement>('meta[name="csp-nonce"]')?.content || null;
+    for (const old of Array.from(fragment.querySelectorAll("script"))) {
+      const script = document.createElement("script");
+      for (const attr of Array.from(old.attributes)) {
+        const name = attr.name.toLowerCase();
         if (!SCRIPT_ATTRS.has(name) && !name.startsWith("data-")) continue;
-        if (name.startsWith("on")) continue;
-        s.setAttribute(name, a.value);
+        if (name.startsWith("on") || /javascript:|data:/i.test(attr.value)) continue;
+        script.setAttribute(name, attr.value);
       }
-      s.text = old.textContent ?? "";
-      old.replaceWith(s);
-    });
-    return () => {
-      el.innerHTML = "";
-    };
+      script.text = old.textContent ?? "";
+      if (nonce) script.setAttribute("nonce", nonce);
+      old.replaceWith(script);
+    }
+
+    el.replaceChildren(fragment);
+    return () => el.replaceChildren();
   }, [safeHtml]);
 
   if (!safeHtml) return null;

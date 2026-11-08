@@ -3,6 +3,19 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { handleSeoRequest } from "./lib/seo-routes.server";
+import {
+  applySecurityHeaders,
+  isPrivatePath,
+  newRequestId,
+  type SecurityContext,
+} from "./lib/security-headers.server";
+import {
+  clientKeyFromRequest,
+  isStaticAssetPath,
+  LIMITS,
+  rateLimitedResponse,
+  requestLimiter,
+} from "@/lib/rate-limit";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -19,25 +32,43 @@ async function getServerEntry(): Promise<ServerEntry> {
   return serverEntryPromise;
 }
 
-/**
- * Baseline response hardening. Deliberately avoids a restrictive CSP or
- * X-Frame-Options: the app is embedded by the Lovable editor, third-party ad
- * tags load remote scripts, and /embed/:id is designed to be framed. Those
- * headers would break the synced deployment.
- */
-function withSecurityHeaders(request: Request, response: Response): Response {
-  const headers = new Headers(response.headers);
-  headers.set("X-Content-Type-Options", "nosniff");
-  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
-  if (request.url.startsWith("https://")) {
-    headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+/** Extracts only non-sensitive fields from a CSP violation report. */
+function safeCspSummary(raw: string): string {
+  try {
+    const payload = JSON.parse(raw) as Record<string, unknown>;
+    const report = (payload["csp-report"] ?? payload) as Record<string, unknown>;
+    const host = (value: unknown) => {
+      if (typeof value !== "string") return "<none>";
+      try {
+        return new URL(value).host;
+      } catch {
+        return "<invalid>";
+      }
+    };
+    return JSON.stringify({
+      directive: String(report["violated-directive"] ?? "").slice(0, 120),
+      blocked: host(report["blocked-uri"]),
+      document: host(report["document-uri"]),
+      source: String(report["source-file"] ?? "").slice(0, 120),
+    });
+  } catch {
+    return "<unparseable report>";
   }
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
+}
+
+async function handleCspReport(request: Request): Promise<Response> {
+  const limited = requestLimiter.check(`csp:${clientKeyFromRequest(request)}`, LIMITS.cspReport);
+  if (!limited.allowed) return rateLimitedResponse(limited);
+  const declared = Number(request.headers.get("content-length") ?? 0);
+  if (declared > 16_384) return new Response(null, { status: 413 });
+  try {
+    const body = await request.text();
+    if (body.length > 16_384) return new Response(null, { status: 413 });
+    console.warn("[csp-report]", safeCspSummary(body));
+  } catch {
+    /* malformed reports are ignored, never surfaced */
+  }
+  return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
 }
 
 // h3 swallows in-handler throws into a normal 500 Response with body
@@ -68,19 +99,55 @@ function isH3SwallowedErrorBody(body: string): boolean {
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    const requestId = newRequestId();
+    let pathname = "/";
+    let isHttps = false;
     try {
+      const url = new URL(request.url);
+      pathname = url.pathname;
+      isHttps = url.protocol === "https:";
+    } catch {
+      /* malformed URL: still answer safely */
+    }
+    const context: SecurityContext = { pathname, isHttps, requestId };
+    const harden = (response: Response) => {
+      const enriched: SecurityContext = {
+        ...context,
+        contentType: response.headers.get("content-type"),
+      };
+      return applySecurityHeaders(response, enriched);
+    };
+
+    try {
+      if (pathname === "/csp-report") {
+        if (request.method !== "POST") return harden(new Response(null, { status: 405 }));
+        return harden(await handleCspReport(request));
+      }
+
+      // Budget every dynamic request. Static assets are served by the platform
+      // and are not charged against the SSR budget (dev HMR included).
+      if (!isStaticAssetPath(pathname)) {
+        const limited = requestLimiter.check(
+          `doc:${clientKeyFromRequest(request)}`,
+          LIMITS.document,
+        );
+        if (!limited.allowed) return harden(rateLimitedResponse(limited));
+      }
+
       // Belt-and-braces: the request middleware normally handles these, but the
       // production entry also serves them so crawlers never hit a 404 sitemap.
       const seo = await handleSeoRequest(request);
-      if (seo) return withSecurityHeaders(request, seo);
+      if (seo) {
+        if (isPrivatePath(pathname)) seo.headers.set("Cache-Control", "no-store");
+        return harden(seo);
+      }
 
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      return withSecurityHeaders(request, await normalizeCatastrophicSsrResponse(response));
+      return harden(await normalizeCatastrophicSsrResponse(response));
     } catch (error) {
-      console.error(error);
-      return withSecurityHeaders(
-        request,
+      console.error(`[${requestId}]`, error);
+      return harden(
         new Response(renderErrorPage(), {
           status: 500,
           headers: { "content-type": "text/html; charset=utf-8" },

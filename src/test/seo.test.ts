@@ -77,6 +77,15 @@ describe("page head", () => {
     expect(head.meta).toContainEqual({ title: "Trending | ArinX" });
   });
 
+  it("never emits duplicate meta names/properties (HeadContent dedupes by key)", () => {
+    const head = pageHead("Trending", "Popular videos", { path: "/trending" });
+    const keys = head.meta
+      .map((m) => (typeof m.name === "string" ? m.name : m.property))
+      .filter((key): key is string => typeof key === "string");
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keys.filter((key) => key === "theme-color")).toHaveLength(1);
+  });
+
   it("marks private pages noindex and omits their canonical", () => {
     const head = pageHead("Studio", "Manage videos", { noindex: true });
     expect(head.meta).toContainEqual({

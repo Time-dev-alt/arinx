@@ -28,7 +28,7 @@ import {
 import { cn } from "@/lib/utils";
 import { publicCatalog } from "@/lib/catalog.functions";
 import { VideoLinks } from "@/components/SeoLinks";
-import { breadcrumbJsonLd, itemListJsonLd } from "@/lib/seo";
+import { breadcrumbJsonLd, videoCarouselJsonLd } from "@/lib/seo";
 import { canonicalUrl } from "@/lib/site";
 
 export const Route = createFileRoute("/shorts")({
@@ -44,10 +44,8 @@ export const Route = createFileRoute("/shorts")({
       {
         path: "/shorts",
         jsonLd: [
-          itemListJsonLd(
-            (loaderData?.videos ?? [])
-              .filter((v: Video) => v.isShort)
-              .map((v) => ({ id: v.id, title: v.title })),
+          videoCarouselJsonLd(
+            (loaderData?.videos ?? []).filter((v: Video) => v.isShort),
             "Shorts on ArinX",
             canonicalUrl("/shorts"),
           ),

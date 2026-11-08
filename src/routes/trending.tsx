@@ -8,7 +8,7 @@ import { pageHead } from "@/lib/format";
 import { publicVideosQuery, type Video } from "@/lib/api";
 import { publicCatalog } from "@/lib/catalog.functions";
 import { withinPeriod } from "@/lib/growth";
-import { breadcrumbJsonLd, itemListJsonLd } from "@/lib/seo";
+import { breadcrumbJsonLd, videoCarouselJsonLd } from "@/lib/seo";
 import { canonicalUrl } from "@/lib/site";
 
 const PERIODS = ["Now", "Today", "This week", "This month", "This year"] as const;
@@ -35,8 +35,8 @@ export const Route = createFileRoute("/trending")({
       {
         path: "/trending",
         jsonLd: [
-          itemListJsonLd(
-            (loaderData?.videos ?? []).map((v: Video) => ({ id: v.id, title: v.title })),
+          videoCarouselJsonLd(
+            (loaderData?.videos ?? []).filter((v: Video) => !v.isShort),
             "Trending videos on ArinX",
             canonicalUrl("/trending"),
           ),

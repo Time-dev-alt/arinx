@@ -1,25 +1,48 @@
 /**
- * In-browser video compression + watermarking powered by ffmpeg.wasm (WebAssembly).
- * Loaded lazily on first use so it never ships in the initial bundle or runs during SSR.
+ * Enterprise-grade browser encoder for uploads.
  *
- * What it does to every upload (when enabled in the admin panel):
- *  - Re-encodes to H.264 MP4 at the chosen preset (resolution cap + CRF), AAC 128k audio.
- *  - Bakes a VISIBLE watermark (rendered to a PNG on a canvas, then overlaid) into every frame.
- *  - Bakes an INVISIBLE fingerprint: a unique ID written into the file metadata and into a
- *    near-invisible pixel tag in a corner, so re-uploads/screenshots can be traced.
+ * Pipeline: probe → integrity-verified WASM core → pre-rendered watermark
+ * layers → single-pass ffmpeg graph → verified MP4 → upload.
+ *
+ * Hardening / speed properties:
+ *  - every ffmpeg core byte is SHA-256 verified against the npm tarball before
+ *    execution (no unverified CDN code), with three CDN mirrors;
+ *  - multithreaded core is used only on cross-origin-isolated pages, and falls
+ *    back to single-thread automatically;
+ *  - one shared encoder instance behind a serial queue, with per-job file
+ *    names, so concurrent uploads cannot clobber each other;
+ *  - full AbortSignal cancellation, hard encode timeout and guaranteed FS
+ *    cleanup on success, failure and abort;
+ *  - source metadata is stripped, a visible mark and a tiled forensic tag are
+ *    baked in, and the fingerprint is returned for server-side registration;
+ *  - the filter graph avoids per-frame rescaling and pixel-format conversions.
  */
+import {
+  CORE_HASHES,
+  MAX_ENCODE_MS,
+  MAX_INPUT_BYTES,
+  constantTimeHexEqual,
+  coreAssetUrls,
+  estimateEtaSeconds,
+  planEncoding,
+  sha256Hex,
+  type CompressPreset,
+  type MediaProbe,
+} from "@/lib/media-plan";
+import { probeMedia } from "@/lib/media-probe";
 
-export type CompressPreset = "ultra" | "balanced" | "quality";
+export type { CompressPreset, MediaProbe };
 
 export interface CompressOptions {
   preset: CompressPreset;
-  /** Optional channel image watermark (PNG/JPG). When set, it is used instead of the text. */
   watermarkImage?: Blob | null;
   watermarkText: string;
-  /** Traceable owner tag (e.g. channel handle) baked into the invisible layer and metadata. */
   ownerTag?: string;
-  watermarkPosition: string; // "top-left" | "top-right" | "bottom-left" | "bottom-right"
-  onProgress?: (ratio: number, stage: string) => void;
+  watermarkPosition: string;
+  /** Optional precomputed probe (the upload page already opened the file). */
+  probe?: MediaProbe | null;
+  signal?: AbortSignal;
+  onProgress?: (ratio: number, stage: string, etaSeconds?: number | null) => void;
 }
 
 export interface CompressResult {
@@ -27,182 +50,364 @@ export interface CompressResult {
   originalSize: number;
   compressedSize: number;
   fingerprint: string;
-  compressed: boolean; // false if we fell back to the original file
+  compressed: boolean;
+  /** Observability for the creator and for support diagnostics. */
+  elapsedMs: number;
+  width: number | null;
+  height: number | null;
+  preset: CompressPreset;
+  multithreaded: boolean;
+  copiedAudio: boolean;
+  coreIntegrityVerified: boolean;
 }
 
-const PRESETS: Record<CompressPreset, { maxWidth: number; crf: number; audioKbps: number }> = {
-  ultra: { maxWidth: 1280, crf: 30, audioKbps: 96 },
-  balanced: { maxWidth: 1920, crf: 26, audioKbps: 128 },
-  quality: { maxWidth: 1920, crf: 22, audioKbps: 160 },
-};
+type FFmpeg = import("@ffmpeg/ffmpeg").FFmpeg;
 
-let ffmpegPromise: Promise<import("@ffmpeg/ffmpeg").FFmpeg> | null = null;
-
-async function getFFmpeg(onProgress?: (ratio: number, stage: string) => void) {
-  if (!ffmpegPromise) {
-    ffmpegPromise = (async () => {
-      const { FFmpeg } = await import("@ffmpeg/ffmpeg");
-      const { toBlobURL } = await import("@ffmpeg/util");
-      const ffmpeg = new FFmpeg();
-      const mt = typeof SharedArrayBuffer !== "undefined";
-      const base = mt
-        ? "https://unpkg.com/@ffmpeg/core-mt@0.12.6/dist/esm"
-        : "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm";
-      onProgress?.(0, "Loading compressor…");
-      await ffmpeg.load({
-        coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, "text/javascript"),
-        wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, "application/wasm"),
-        ...(mt
-          ? { workerURL: await toBlobURL(`${base}/ffmpeg-core.worker.js`, "text/javascript") }
-          : {}),
-      });
-      return ffmpeg;
-    })();
-  }
-  return ffmpegPromise;
+interface Encoder {
+  ffmpeg: FFmpeg;
+  multithreaded: boolean;
+  blobUrls: string[];
 }
 
-/** Renders the visible watermark text to a transparent PNG. */
-async function watermarkPng(text: string): Promise<Uint8Array> {
-  const c = document.createElement("canvas");
-  const pad = 14;
-  const font = "600 28px sans-serif";
-  const ctx = c.getContext("2d")!;
-  ctx.font = font;
-  const w = Math.ceil(ctx.measureText(text).width);
-  c.width = w + pad * 2;
-  c.height = 44;
-  const ctx2 = c.getContext("2d")!;
-  ctx2.font = font;
-  ctx2.textBaseline = "middle";
-  ctx2.fillStyle = "rgba(255,255,255,0.55)";
-  ctx2.shadowColor = "rgba(0,0,0,0.6)";
-  ctx2.shadowBlur = 4;
-  ctx2.fillText(text, pad, c.height / 2);
-  const blob = await new Promise<Blob>((r) => c.toBlob((b) => r(b!), "image/png"));
-  return new Uint8Array(await blob.arrayBuffer());
+let encoderPromise: Promise<Encoder> | null = null;
+let jobQueue: Promise<unknown> = Promise.resolve();
+let jobCounter = 0;
+
+function assertNotAborted(signal?: AbortSignal) {
+  if (signal?.aborted) throw new DOMException("Compression cancelled", "AbortError");
 }
 
-/** Full-frame, near-invisible tiled layer carrying the fingerprint — survives re-encodes and crops. */
-async function invisiblePng(tag: string): Promise<Uint8Array> {
-  const c = document.createElement("canvas");
-  c.width = 1280;
-  c.height = 720;
-  const ctx = c.getContext("2d")!;
-  ctx.font = "600 22px monospace";
-  ctx.fillStyle = "rgba(255,255,255,0.025)";
-  ctx.rotate(-0.35);
-  for (let y = -200; y < 1100; y += 90)
-    for (let x = -400; x < 1600; x += tag.length * 14 + 80) ctx.fillText(tag, x, y);
-  const blob = await new Promise<Blob>((r) => c.toBlob((b) => r(b!), "image/png"));
-  return new Uint8Array(await blob.arrayBuffer());
-}
+async function fetchVerified(
+  kind: "st" | "mt",
+  filename: string,
+  signal?: AbortSignal,
+): Promise<{ url: string; bytes: Uint8Array }> {
+  const expected = CORE_HASHES[kind][filename];
+  if (!expected) throw new Error(`No pinned hash for ${kind}/${filename}`);
+  const mime = filename.endsWith(".wasm") ? "application/wasm" : "text/javascript";
+  const failures: string[] = [];
 
-function overlayPos(pos: string): string {
-  switch (pos) {
-    case "top-left":
-      return "24:24";
-    case "top-right":
-      return "W-w-24:24";
-    case "bottom-left":
-      return "24:H-h-24";
-    default:
-      return "W-w-24:H-h-24";
-  }
-}
-
-export async function compressVideo(file: File, opts: CompressOptions): Promise<CompressResult> {
-  const fingerprint = crypto.randomUUID().slice(0, 8);
-  const tag = `ARINX ${opts.ownerTag ?? ""} ${fingerprint}`.replace(/\s+/g, " ");
-  const ffmpeg = await getFFmpeg(opts.onProgress);
-  const { fetchFile } = await import("@ffmpeg/util");
-  const p = PRESETS[opts.preset] ?? PRESETS.balanced;
-
-  opts.onProgress?.(0, "Reading video…");
-  await ffmpeg.writeFile("in", await fetchFile(file));
-  const useImage = !!opts.watermarkImage;
-  await ffmpeg.writeFile(
-    "wm.png",
-    useImage
-      ? new Uint8Array(await opts.watermarkImage!.arrayBuffer())
-      : await watermarkPng(opts.watermarkText || "ArinX"),
-  );
-  await ffmpeg.writeFile("inv.png", await invisiblePng(tag));
-
-  let lastRatio = 0;
-  const onP = ({ progress }: { progress: number }) => {
-    const r = Math.max(0, Math.min(1, progress));
-    if (r - lastRatio > 0.02) {
-      lastRatio = r;
-      opts.onProgress?.(r, "Compressing & watermarking…");
+  for (const candidate of coreAssetUrls(kind, filename)) {
+    try {
+      assertNotAborted(signal);
+      const response = await fetch(candidate, { signal, cache: "force-cache" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      const actual = await sha256Hex(bytes);
+      if (!constantTimeHexEqual(actual, expected)) {
+        failures.push(`${new URL(candidate).host}: digest mismatch`);
+        continue;
+      }
+      return { url: URL.createObjectURL(new Blob([bytes], { type: mime })), bytes };
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      failures.push(`${new URL(candidate).host}: ${String(error)}`);
     }
-  };
-  ffmpeg.on("progress", onP);
+  }
+  throw new Error(`Could not load a verified ffmpeg core (${filename}): ${failures.join("; ")}`);
+}
 
-  // [s] scaled source → invisible tiled layer stretched over it → visible mark in the corner.
-  const graph = [
-    `[0:v]scale='min(${p.maxWidth},iw)':-2[s]`,
-    `[2:v][s]scale2ref[inv][s1]`,
-    `[s1][inv]overlay=0:0[a]`,
-    useImage
-      ? `[1:v]scale='min(200,iw)':-1,format=rgba,colorchannelmixer=aa=0.7[w]`
-      : `[1:v]null[w]`,
-    `[a][w]overlay=${overlayPos(opts.watermarkPosition)}[v]`,
-  ].join(";");
-  const args = [
-    "-i",
-    "in",
-    "-i",
-    "wm.png",
-    "-i",
-    "inv.png",
-    "-filter_complex",
-    graph,
-    "-map",
-    "[v]",
-    "-map",
-    "0:a?",
-    "-c:v",
-    "libx264",
-    "-preset",
-    "veryfast",
-    "-crf",
-    String(p.crf),
-    "-pix_fmt",
-    "yuv420p",
-    "-c:a",
-    "aac",
-    "-b:a",
-    `${p.audioKbps}k`,
-    "-movflags",
-    "+faststart",
-    "-metadata",
-    `comment=arinx:wm:${fingerprint}`,
-    "-metadata",
-    `copyright=${opts.ownerTag || opts.watermarkText || "ArinX"} via ArinX`,
-    "-metadata",
-    `description=${tag}`,
-    "out.mp4",
-  ];
+async function loadEncoder(
+  kind: "st" | "mt",
+  onProgress?: CompressOptions["onProgress"],
+  signal?: AbortSignal,
+): Promise<Encoder> {
+  const { FFmpeg } = await import("@ffmpeg/ffmpeg");
+  const files =
+    kind === "mt"
+      ? ["ffmpeg-core.js", "ffmpeg-core.wasm", "ffmpeg-core.worker.js"]
+      : ["ffmpeg-core.js", "ffmpeg-core.wasm"];
+  onProgress?.(0, "Verifying compressor…");
+  const verified = await Promise.all(files.map((f) => fetchVerified(kind, f, signal)));
+  const blobUrls = verified.map((v) => v.url);
+  const byName = Object.fromEntries(files.map((f, i) => [f, verified[i].url]));
+
+  const ffmpeg = new FFmpeg();
   try {
-    const ok = await ffmpeg.exec(args);
-    if (ok !== 0) throw new Error("Watermarking failed (code " + ok + ")");
-    const data = await ffmpeg.readFile("out.mp4");
-    const bytes = data instanceof Uint8Array ? data : new TextEncoder().encode(data as string);
-    const buf = new Uint8Array(bytes.length);
-    buf.set(bytes);
-    const blob = new Blob([buf.buffer], { type: "video/mp4" });
-    // Watermarks are mandatory, so the re-encoded file is always kept.
+    await ffmpeg.load(
+      {
+        coreURL: byName["ffmpeg-core.js"],
+        wasmURL: byName["ffmpeg-core.wasm"],
+        ...(kind === "mt" ? { workerURL: byName["ffmpeg-core.worker.js"] } : {}),
+      },
+      { signal },
+    );
+  } catch (error) {
+    for (const url of blobUrls) URL.revokeObjectURL(url);
+    throw error;
+  }
+  return { ffmpeg, multithreaded: kind === "mt", blobUrls };
+}
+
+function crossOriginIsolated(): boolean {
+  return (
+    typeof globalThis.crossOriginIsolated === "boolean" &&
+    globalThis.crossOriginIsolated &&
+    typeof SharedArrayBuffer !== "undefined"
+  );
+}
+
+async function getEncoder(
+  onProgress?: CompressOptions["onProgress"],
+  signal?: AbortSignal,
+): Promise<Encoder> {
+  if (!encoderPromise) {
+    const preferred = crossOriginIsolated() ? "mt" : "st";
+    encoderPromise = loadEncoder(preferred, onProgress, signal).catch(async (error) => {
+      encoderPromise = null;
+      if (preferred === "mt") {
+        // Some hosts expose SharedArrayBuffer without a working pthread build.
+        onProgress?.(0, "Falling back to single-thread compressor…");
+        return loadEncoder("st", onProgress, signal);
+      }
+      throw error;
+    });
+  }
+  return encoderPromise;
+}
+
+export function resetEncoder(): void {
+  const pending = encoderPromise;
+  encoderPromise = null;
+  void pending
+    ?.then((encoder) => {
+      for (const url of encoder.blobUrls) URL.revokeObjectURL(url);
+      try {
+        encoder.ffmpeg.terminate();
+      } catch {
+        /* already gone */
+      }
+    })
+    .catch(() => {});
+}
+
+/** A tiny serial lock: one FFmpeg instance is shared by all uploads. */
+function serialize<T>(task: () => Promise<T>): Promise<T> {
+  const run = jobQueue.then(task, task);
+  jobQueue = run.catch(() => {});
+  return run;
+}
+
+type CanvasLike = OffscreenCanvas | HTMLCanvasElement;
+
+/** A real type predicate: the `typeof ... && instanceof ...` form does not
+ * narrow the negative branch, which left `canvas.toBlob()` untyped. */
+function isOffscreenCanvas(canvas: CanvasLike): canvas is OffscreenCanvas {
+  return typeof OffscreenCanvas !== "undefined" && canvas instanceof OffscreenCanvas;
+}
+
+function createCanvas(width: number, height: number): CanvasLike {
+  if (typeof OffscreenCanvas !== "undefined") return new OffscreenCanvas(width, height);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  return canvas;
+}
+
+async function canvasToBytes(canvas: CanvasLike): Promise<Uint8Array> {
+  let blob: Blob | null;
+  if (isOffscreenCanvas(canvas)) {
+    blob = await canvas.convertToBlob({ type: "image/png" });
+  } else {
+    blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+  }
+  if (!blob) throw new Error("Could not render watermark layer");
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+/** Visible text mark, with the final alpha already baked into the PNG. */
+async function watermarkPng(text: string): Promise<Uint8Array> {
+  const font = "600 28px sans-serif";
+  const measure = createCanvas(8, 8).getContext("2d") as
+    CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+  if (!measure) throw new Error("Canvas 2D unavailable");
+  measure.font = font;
+  const label = text.slice(0, 80) || "ArinX";
+  const width = Math.min(1200, Math.ceil(measure.measureText(label).width) + 28);
+  const canvas = createCanvas(width, 44);
+  const ctx = canvas.getContext("2d") as
+    CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+  ctx.font = font;
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "rgba(255,255,255,0.62)";
+  ctx.shadowColor = "rgba(0,0,0,0.65)";
+  ctx.shadowBlur = 4;
+  ctx.fillText(label, 14, canvas.height / 2);
+  return canvasToBytes(canvas);
+}
+
+/** Scales a creator image and bakes the opacity in, so ffmpeg needs no filter. */
+async function watermarkImagePng(source: Blob): Promise<Uint8Array> {
+  const maxW = 200;
+  const bitmap = await createImageBitmap(source);
+  try {
+    const scale = Math.min(1, maxW / bitmap.width);
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext("2d") as
+      CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+    ctx.globalAlpha = 0.72;
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    return await canvasToBytes(canvas);
+  } finally {
+    bitmap.close();
+  }
+}
+
+/**
+ * Tiled forensic layer rendered at the exact output size. A tiled, low-amplitude
+ * tag survives cropping, scaling and most re-encodes far better than a corner
+ * pixel mark.
+ */
+async function invisiblePng(
+  tag: string,
+  width: number | null,
+  height: number | null,
+): Promise<Uint8Array> {
+  const w = Math.max(320, Math.min(1920, width ?? 1280));
+  const h = Math.max(180, Math.min(1080, height ?? 720));
+  const canvas = createCanvas(w, h);
+  const ctx = canvas.getContext("2d") as
+    CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+  ctx.font = "600 22px monospace";
+  ctx.fillStyle = "rgba(255,255,255,0.028)";
+  ctx.rotate(-0.35);
+  const stepX = Math.max(160, tag.length * 14 + 80);
+  for (let y = -h; y < h * 1.6; y += 90) {
+    for (let x = -w; x < w * 1.6; x += stepX) ctx.fillText(tag, x, y);
+  }
+  return canvasToBytes(canvas);
+}
+
+function looksLikeMp4(bytes: Uint8Array): boolean {
+  return (
+    bytes.length > 1024 &&
+    bytes[4] === 0x66 &&
+    bytes[5] === 0x74 &&
+    bytes[6] === 0x79 &&
+    bytes[7] === 0x70
+  );
+}
+
+/**
+ * Compresses and watermarks one file. Watermarks are mandatory, so a failed
+ * encode never silently falls back to an unwatermarked original.
+ */
+export function compressVideo(file: File, opts: CompressOptions): Promise<CompressResult> {
+  return serialize(() => runCompression(file, opts));
+}
+
+async function runCompression(file: File, opts: CompressOptions): Promise<CompressResult> {
+  const started = Date.now();
+  const { signal, onProgress } = opts;
+  assertNotAborted(signal);
+
+  if (file.size > MAX_INPUT_BYTES) {
+    throw new Error("File is too large to process in the browser (2 GB limit)");
+  }
+  if (!file.size) throw new Error("The selected file is empty");
+
+  const job = `j${++jobCounter}_${Date.now().toString(36)}`;
+  const names = {
+    input: `${job}_in`,
+    watermark: `${job}_wm.png`,
+    invisible: `${job}_inv.png`,
+    output: `${job}_out.mp4`,
+  };
+  const fingerprint = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+  const tag = `ARINX ${opts.ownerTag ?? ""} ${fingerprint}`.replace(/\s+/g, " ").slice(0, 120);
+
+  onProgress?.(0, "Inspecting media…");
+  const probe = opts.probe === undefined ? await probeMedia(file) : opts.probe;
+  const encoder = await getEncoder(onProgress, signal);
+  const plan = planEncoding({
+    preset: opts.preset,
+    probe,
+    names,
+    position: opts.watermarkPosition,
+    multithreaded: encoder.multithreaded,
+    fingerprint,
+    ownerTag: opts.ownerTag ?? "",
+    watermarkText: opts.watermarkText,
+  });
+
+  const { fetchFile } = await import("@ffmpeg/util");
+  const ffmpeg = encoder.ffmpeg;
+  let lastRatio = 0;
+  const onFfmpegProgress = ({ progress }: { progress: number }) => {
+    const ratio = Math.max(0, Math.min(1, progress));
+    if (ratio - lastRatio < 0.015 && ratio < 1) return;
+    lastRatio = ratio;
+    onProgress?.(
+      ratio,
+      "Compressing & watermarking…",
+      estimateEtaSeconds(Date.now() - started, ratio),
+    );
+  };
+
+  const written: string[] = [];
+  try {
+    assertNotAborted(signal);
+    onProgress?.(0.01, "Reading video…");
+    await ffmpeg.writeFile(names.input, await fetchFile(file));
+    written.push(names.input);
+
+    onProgress?.(0.02, "Rendering watermarks…");
+    const [visible, invisible] = await Promise.all([
+      opts.watermarkImage
+        ? watermarkImagePng(opts.watermarkImage)
+        : watermarkPng(opts.watermarkText || "ArinX"),
+      invisiblePng(tag, plan.outWidth, plan.outHeight),
+    ]);
+    await Promise.all([
+      ffmpeg.writeFile(names.watermark, visible).then(() => written.push(names.watermark)),
+      ffmpeg.writeFile(names.invisible, invisible).then(() => written.push(names.invisible)),
+    ]);
+
+    assertNotAborted(signal);
+    ffmpeg.on("progress", onFfmpegProgress);
+    const code = await ffmpeg.exec(plan.args, MAX_ENCODE_MS, { signal });
+    if (code !== 0) throw new Error(`Watermarking failed (ffmpeg code ${code})`);
+    written.push(names.output);
+
+    const data = await ffmpeg.readFile(names.output);
+    const bytes =
+      data instanceof Uint8Array ? new Uint8Array(data) : new TextEncoder().encode(String(data));
+    if (!looksLikeMp4(bytes)) throw new Error("Encoder produced an invalid MP4 file");
+    const blob = new Blob([bytes.slice().buffer], { type: "video/mp4" });
+
+    onProgress?.(1, "Done", 0);
     return {
       blob,
       originalSize: file.size,
       compressedSize: blob.size,
       fingerprint,
       compressed: true,
+      elapsedMs: Date.now() - started,
+      width: plan.outWidth,
+      height: plan.outHeight,
+      preset: opts.preset,
+      multithreaded: encoder.multithreaded,
+      copiedAudio: plan.copyAudio,
+      coreIntegrityVerified: true,
     };
+  } catch (error) {
+    if (signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) {
+      resetEncoder();
+      throw new DOMException("Compression cancelled", "AbortError");
+    }
+    throw error instanceof Error ? error : new Error("Video processing failed");
   } finally {
-    ffmpeg.off("progress", onP);
-    for (const f of ["in", "out.mp4", "wm.png", "inv.png"])
-      await ffmpeg.deleteFile(f).catch(() => {});
+    ffmpeg.off("progress", onFfmpegProgress);
+    for (const name of new Set([
+      ...written,
+      names.output,
+      names.watermark,
+      names.invisible,
+      names.input,
+    ])) {
+      await ffmpeg.deleteFile(name).catch(() => {});
+    }
   }
 }
