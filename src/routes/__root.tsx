@@ -17,6 +17,7 @@ import appCss from "../styles.css?url";
 import { DEFAULT_DESCRIPTION, DEFAULT_OG_IMAGE } from "../lib/site";
 import { organizationJsonLd, webSiteJsonLd } from "../lib/seo";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { startWebVitals } from "@/lib/web-vitals";
 import { AppShell } from "@/components/AppShell";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -109,6 +110,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:image", content: DEFAULT_OG_IMAGE },
       { "script:ld+json": webSiteJsonLd() },
       { "script:ld+json": organizationJsonLd() },
+      // Google Search Console ownership proof. Set VITE_GOOGLE_SITE_VERIFICATION
+      // in the deployment environment; no tag is emitted when it is absent.
+      ...(import.meta.env.VITE_GOOGLE_SITE_VERIFICATION
+        ? [
+            {
+              name: "google-site-verification",
+              content: String(import.meta.env.VITE_GOOGLE_SITE_VERIFICATION).slice(0, 256),
+            },
+          ]
+        : []),
       // HilltopAds verification tag — keep for the existing ad partnership.
       {
         name: "b38c5333923b048c5677322c38ed246322833031",
@@ -168,7 +179,11 @@ function RootComponent() {
       router.invalidate();
       queryClient.invalidateQueries();
     });
-    return () => data.subscription.unsubscribe();
+    const stopVitals = startWebVitals();
+    return () => {
+      data.subscription.unsubscribe();
+      stopVitals();
+    };
   }, [queryClient, router]);
   return (
     <QueryClientProvider client={queryClient}>

@@ -85,6 +85,13 @@
       "when": 1794058000000,
       "tag": "0011_harden_public_content",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794060000000,
+      "tag": "0012_enterprise_constraints",
+      "breakpoints": true
     }
   ]
 }

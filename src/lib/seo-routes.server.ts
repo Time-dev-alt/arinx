@@ -21,9 +21,9 @@ import {
   clientKeyFromRequest,
   LIMITS,
   rateLimitedResponse,
-  requestLimiter,
   type RateLimitRule,
 } from "@/lib/rate-limit";
+import { checkRateLimit } from "@/lib/rate-limit-backend";
 
 /** Server-only. Never import from client components. */
 
@@ -75,8 +75,12 @@ function redirect(location: string): Response {
 }
 
 /** Returns a 429 Response when a client has exhausted its budget. */
-function guard(request: Request, bucket: string, rule: RateLimitRule): Response | null {
-  const result = requestLimiter.check(`${bucket}:${clientKeyFromRequest(request)}`, rule);
+async function guard(
+  request: Request,
+  bucket: string,
+  rule: RateLimitRule,
+): Promise<Response | null> {
+  const result = await checkRateLimit(`${bucket}:${clientKeyFromRequest(request)}`, rule);
   return result.allowed ? null : rateLimitedResponse(result);
 }
 
@@ -243,7 +247,7 @@ export async function handleSeoRequest(request: Request): Promise<Response | nul
   }
 
   if (url.pathname === "/sitemap.xml") {
-    const blocked = guard(request, "sitemap", LIMITS.sitemap);
+    const blocked = await guard(request, "sitemap", LIMITS.sitemap);
     if (blocked) return blocked;
     const count = await countPublicVideos();
     const pages = Math.min(MAX_PAGES, Math.max(1, Math.ceil(count / PAGE_SIZE)));
@@ -271,19 +275,19 @@ export async function handleSeoRequest(request: Request): Promise<Response | nul
   }
 
   if (url.pathname === "/sitemap-pages.xml") {
-    const blocked = guard(request, "sitemap", LIMITS.sitemap);
+    const blocked = await guard(request, "sitemap", LIMITS.sitemap);
     if (blocked) return blocked;
     return xmlResponse(buildSitemapXml(staticEntries()));
   }
 
   if (url.pathname === "/sitemap-channels.xml") {
-    const blocked = guard(request, "sitemap", LIMITS.sitemap);
+    const blocked = await guard(request, "sitemap", LIMITS.sitemap);
     if (blocked) return blocked;
     return xmlResponse(buildSitemapXml(channelEntries(await fetchChannelRows())));
   }
 
   if (url.pathname === "/sitemap-videos.xml") {
-    const blocked = guard(request, "sitemap", LIMITS.sitemap);
+    const blocked = await guard(request, "sitemap", LIMITS.sitemap);
     if (blocked) return blocked;
     const raw = Number(url.searchParams.get("page") ?? "1");
     const page = Number.isFinite(raw) ? Math.min(MAX_PAGES, Math.max(1, Math.floor(raw))) : 1;
@@ -292,7 +296,7 @@ export async function handleSeoRequest(request: Request): Promise<Response | nul
   }
 
   if (url.pathname === "/feed.xml") {
-    const blocked = guard(request, "sitemap", LIMITS.sitemap);
+    const blocked = await guard(request, "sitemap", LIMITS.sitemap);
     if (blocked) return blocked;
     return xmlResponse(
       buildRssFeed(feedItems(await fetchVideoRows(0, 49))),
@@ -303,7 +307,7 @@ export async function handleSeoRequest(request: Request): Promise<Response | nul
 
   const match = /^\/media\/thumbnail\/([A-Za-z0-9._-]{1,200})\/?$/.exec(url.pathname);
   if (match) {
-    const blocked = guard(request, "thumb", LIMITS.thumbnail);
+    const blocked = await guard(request, "thumb", LIMITS.thumbnail);
     if (blocked) return blocked;
     return thumbnailResponse(match[1]);
   }

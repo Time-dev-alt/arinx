@@ -50,7 +50,9 @@ export function AdSlot({ slot, className }: { slot: Slot; className?: string }) 
     }
 
     const nonce =
-      document.querySelector<HTMLMetaElement>('meta[name="csp-nonce"]')?.content || null;
+      document.querySelector<HTMLMetaElement>('meta[property="csp-nonce"]')?.content ||
+      document.querySelector<HTMLMetaElement>('meta[name="csp-nonce"]')?.content ||
+      null;
     for (const old of Array.from(fragment.querySelectorAll("script"))) {
       const script = document.createElement("script");
       for (const attr of Array.from(old.attributes)) {
@@ -59,8 +61,11 @@ export function AdSlot({ slot, className }: { slot: Slot; className?: string }) 
         if (name.startsWith("on") || /javascript:|data:/i.test(attr.value)) continue;
         script.setAttribute(name, attr.value);
       }
-      script.text = old.textContent ?? "";
-      if (nonce) script.setAttribute("nonce", nonce);
+      // textContent is not a Trusted Types sink; `script.text` can be.
+      script.textContent = old.textContent ?? "";
+      // Use the IDL property: browsers deliberately hide the nonce attribute
+      // value after parsing, and setAttribute alone is not honoured everywhere.
+      if (nonce) script.nonce = nonce;
       old.replaceWith(script);
     }
 

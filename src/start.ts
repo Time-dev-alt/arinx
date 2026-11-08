@@ -3,12 +3,8 @@ import { getRequest } from "@tanstack/react-start/server";
 
 import { renderErrorPage } from "./lib/error-page";
 import { attachSupabaseAuth } from "@/integrations/supabase/auth-attacher";
-import {
-  clientKeyFromRequest,
-  LIMITS,
-  rateLimitedResponse,
-  requestLimiter,
-} from "@/lib/rate-limit";
+import { clientKeyFromRequest, LIMITS, rateLimitedResponse } from "@/lib/rate-limit";
+import { checkRateLimit } from "@/lib/rate-limit-backend";
 
 const errorMiddleware = createMiddleware().server(async ({ next }) => {
   try {
@@ -42,7 +38,7 @@ const abuseMiddleware = createMiddleware().server(
       });
     }
     const key = `fn:${clientKeyFromRequest(request)}:${serverFnMeta?.id ?? "unknown"}`;
-    const limited = requestLimiter.check(key, LIMITS.serverFunction);
+    const limited = await checkRateLimit(key, LIMITS.serverFunction);
     if (!limited.allowed) return rateLimitedResponse(limited);
     return next();
   },

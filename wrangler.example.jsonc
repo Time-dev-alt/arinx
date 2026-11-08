@@ -1,0 +1,44 @@
+{
+  // Reference configuration for globally exact rate limiting and the optional
+  // Durable Object. This file is NOT read by the Lovable/Nitro build: merge the
+  // `durable_objects` / `unsafe` sections into the generated
+  // `.output/server/wrangler.json` (or the platform's Wrangler config) when you
+  // are ready to bind them. `src/server.ts` auto-detects every binding below,
+  // so no application code changes are needed.
+  //
+  // Option A (recommended, simplest): Cloudflare's native Rate Limiting API.
+  //   Create a namespace with `wrangler r2 ...` / the dashboard, then bind it.
+  //   It is atomic across all isolates and needs no custom worker class.
+  //
+  // Option B: the Durable Object in `src/worker/rate-limiter-do.ts`. Add that
+  //   class as a named export of a worker and bind the namespace.
+  //
+  // Option C: a KV namespace. Near-exact (KV writes are eventually consistent).
+  //
+  // If none are present, the platform falls back to the process-local limiter.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "time-dev-alt-arinx",
+  "compatibility_date": "2026-11-07",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Option B only:
+  // "durable_objects": {
+  //   "bindings": [
+  //     { "name": "ARINX_RATE_LIMITS_DO", "class_name": "ArinXRateLimiterDO" }
+  //   ]
+  // },
+
+  "unsafe": {
+    "bindings": [
+      // Option A (pick one):
+      // {
+      //   "name": "ARINX_RATE_LIMITER",
+      //   "type": "ratelimit",
+      //   "namespace_id": "1001",
+      //   "simple": { "limit": 600, "period": 60 }
+      // }
+      // Option C:
+      // { "name": "ARINX_RATE_LIMITS_KV", "type": "kv_namespace", "id": "<kv-id>" }
+    ],
+  },
+}

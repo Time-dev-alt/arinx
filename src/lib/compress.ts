@@ -30,6 +30,8 @@ import {
   type MediaProbe,
 } from "@/lib/media-plan";
 import { probeMedia } from "@/lib/media-probe";
+import { detectEncoderCapabilities } from "@/lib/encoder-capabilities";
+import { computeBenchmark, type EncoderBenchmark } from "@/lib/encoder-benchmark";
 
 export type { CompressPreset, MediaProbe };
 
@@ -139,20 +141,14 @@ async function loadEncoder(
   return { ffmpeg, multithreaded: kind === "mt", blobUrls };
 }
 
-function crossOriginIsolated(): boolean {
-  return (
-    typeof globalThis.crossOriginIsolated === "boolean" &&
-    globalThis.crossOriginIsolated &&
-    typeof SharedArrayBuffer !== "undefined"
-  );
-}
-
 async function getEncoder(
   onProgress?: CompressOptions["onProgress"],
   signal?: AbortSignal,
 ): Promise<Encoder> {
   if (!encoderPromise) {
-    const preferred = crossOriginIsolated() ? "mt" : "st";
+    // Device-aware selection: isolation alone is not enough, we also need
+    // SharedArrayBuffer and at least two logical cores to beat the ST core.
+    const preferred = detectEncoderCapabilities().preferredCore;
     encoderPromise = loadEncoder(preferred, onProgress, signal).catch(async (error) => {
       encoderPromise = null;
       if (preferred === "mt") {
@@ -407,6 +403,90 @@ async function runCompression(file: File, opts: CompressOptions): Promise<Compre
       names.invisible,
       names.input,
     ])) {
+      await ffmpeg.deleteFile(name).catch(() => {});
+    }
+  }
+}
+
+/**
+ * Real, on-device encoder benchmark.
+ *
+ * Loads the SHA-256-verified core, renders a 320×180 gradient frame and
+ * encodes a short constant-input clip at 24 fps. The result is a measured
+ * realtime factor (not a heuristic), so operators can compare devices and
+ * confirm that cross-origin isolation actually makes the MT core faster.
+ * It never touches upload state and cleans up every MEMFS file it creates.
+ */
+export async function benchmarkEncoder(
+  options: { seconds?: number; signal?: AbortSignal; preset?: CompressPreset } = {},
+): Promise<EncoderBenchmark> {
+  const { signal, preset = "balanced" } = options;
+  const seconds = Math.max(1, Math.min(5, Math.round(options.seconds ?? 2)));
+  const sourceFps = 24;
+  const frames = seconds * sourceFps;
+  const stamp = `bench${Date.now().toString(36)}`;
+  const frameName = `${stamp}.png`;
+  const outName = `${stamp}.mp4`;
+
+  const coreStart = performance.now();
+  const encoder = await getEncoder(undefined, signal);
+  const coreLoadMs = performance.now() - coreStart;
+  const ffmpeg = encoder.ffmpeg;
+
+  try {
+    const canvas = createCanvas(320, 180);
+    const ctx = canvas.getContext("2d") as
+      CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+    if (!ctx) throw new Error("Canvas 2D unavailable for benchmark frame");
+    const gradient = ctx.createLinearGradient(0, 0, 320, 180);
+    gradient.addColorStop(0, "#1e293b");
+    gradient.addColorStop(1, "#0ea5e9");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 320, 180);
+    ctx.fillStyle = "rgba(255,255,255,0.8)";
+    ctx.font = "600 20px sans-serif";
+    ctx.fillText("ArinX encoder benchmark", 20, 96);
+    await ffmpeg.writeFile(frameName, await canvasToBytes(canvas));
+
+    const args = [
+      "-loop",
+      "1",
+      "-i",
+      frameName,
+      "-t",
+      String(seconds),
+      "-r",
+      String(sourceFps),
+      "-c:v",
+      "libx264",
+      "-preset",
+      "ultrafast",
+      "-crf",
+      "30",
+      "-pix_fmt",
+      "yuv420p",
+      "-movflags",
+      "+faststart",
+      outName,
+    ];
+    const encodeStart = performance.now();
+    const code = await ffmpeg.exec(args, 120_000, { signal });
+    const encodeMs = performance.now() - encodeStart;
+    if (code !== 0) throw new Error(`Benchmark encode failed (ffmpeg code ${code})`);
+    const data = await ffmpeg.readFile(outName);
+    const bytes = data instanceof Uint8Array ? data : new TextEncoder().encode(String(data));
+    if (!looksLikeMp4(bytes)) throw new Error("Benchmark produced an invalid MP4 file");
+    return computeBenchmark({
+      coreLoadMs,
+      encodeMs,
+      frames,
+      sourceFps,
+      outputBytes: bytes.byteLength,
+      multithreaded: encoder.multithreaded,
+      preset,
+    });
+  } finally {
+    for (const name of [frameName, outName]) {
       await ffmpeg.deleteFile(name).catch(() => {});
     }
   }

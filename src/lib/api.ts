@@ -1,4 +1,5 @@
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
+import { readSignature, validateFileSignature, validateMime } from "@/lib/file-signatures";
 import { createContext, useContext } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { toast } from "sonner";
@@ -560,6 +561,11 @@ export async function uploadFile(
     );
   }
   if (!/^[0-9a-f-]{36}$/i.test(uid)) throw new Error("Invalid owner id");
+  const mime = (file.type ?? "").toLowerCase();
+  if (!validateMime(mime, bucket)) throw new Error("Unsupported media type");
+  // Magic bytes, not the extension, decide what is actually being stored.
+  const signature = validateFileSignature(await readSignature(file), bucket, cleanExt);
+  if (!signature.ok) throw new Error(signature.reason ?? "Invalid file contents");
   const path = `${uid}/${crypto.randomUUID()}.${cleanExt}`;
   const { error } = await supabase.storage
     .from(bucket)

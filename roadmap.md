@@ -12,10 +12,15 @@
 - [x] Dependency hygiene: `zod` bumped to `4.6.7` (removes the only high-severity production advisory), `@testing-library/dom` declared instead of installed with `--no-save`; `bun.lock` regenerated and verified with `bun install --frozen-lockfile --dry-run`. `npm audit --omit=dev` reports 0 vulnerabilities.
 - [x] Enterprise watermark/compression: pure, tested encode planner; SHA-256-pinned ffmpeg core from three mirrors; multithreaded → single-thread fallback; serial job queue; abort/cancel; 15-minute timeout; guaranteed MEMFS cleanup; exact-size pre-rendered PNG layers (no `scale2ref`); AAC stream-copy on MP4 sources; metadata stripping plus visible/invisible/forensic watermarks; MP4 signature validation; background media probe, frame-grab timeouts and ETA/progress in the upload UI.
 - [x] Stronger SEO and tag fixes: removed the contradictory `WebSite SearchAction`, deduplicated head meta tags (one `theme-color`, `color-scheme`), added RSS/MRSS discovery link, sitemap index + paginated shards, `/feed.xml`, real `lastmod` only (no synthetic "now"), Clip/SeekToAction key moments, full VideoObject carousel ItemLists, canonical-origin thumbnail fallback, an h1 on search results, static/dynamic `robots.txt` parity, and HTTPS-only link validation.
-- [ ] Promote the target CSP from Report-Only to enforcement (requires wiring a per-request nonce through TanStack Router and a clean `/csp-report` stream).
-- [ ] Apply migration `0011` in the live database and smoke-test the live `https://arin-x.lovable.app` origin.
-- [ ] Claim Google Search Console, submit `/sitemap.xml`, and add analytics/Core Web Vitals hooks.
-- [ ] Move rate limiting to shared edge state (KV/Durable Object) for globally exact quotas.
-- [ ] Add server-side MIME/codec/virus validation on uploads and a real benchmark of the browser encoder.
+- [x] Enforced nonce-based CSP: per-request AsyncLocalStorage nonce, `router.options.ssr.nonce`, `meta[property=csp-nonce]`, `'strict-dynamic'`, no inline/eval in production, dev-only compatibility policy, Trusted Types promotion flag, and `public/_headers` parity. Verified in the built worker (every executable script carries the response nonce).
+- [x] Operational platform: `/healthz`, `/readyz`, RFC 9116 `/.well-known/security.txt`, validated `/rum` Core Web Vitals beacon (LCP/CLS/INP/FCP/TTFB/long tasks), structured PII-free request logs and a Google Search Console verification hook.
+- [x] Pluggable globally exact rate limiting: Cloudflare native binding, sharded Durable Object, KV backend and local fallback behind one `checkRateLimit()` API; all document/server-function/sitemap/thumbnail/report/rum call sites migrated; fails open on backend errors. 100 unit tests pass.
+- [x] Server-side enforcement authored in `drizzle/migrations/0012_enterprise_constraints.sql`: HTTPS/bounded settings constraints, `storage.objects` MIME/size/path trigger, video metadata bounds, admin audit trail, plus client-side magic-byte and MIME validation.
+- [x] Sink-free first-party UI: chart CSS emitted as text (no `dangerouslySetInnerHTML`), Trusted-Types-safe ad script cloning, corrected `meta[property=csp-nonce]` lookup.
+- [ ] Apply migrations `0011` **and** `0012` in the live database and smoke-test the live `https://arin-x.lovable.app` origin (needs owner/DB access).
+- [ ] Bind `ARINX_RATE_LIMITER` (or `ARINX_RATE_LIMITS_DO`) in the deployed Wrangler config so quotas are globally exact rather than isolate-local (needs platform access).
+- [ ] Claim Google Search Console, set `VITE_GOOGLE_SITE_VERIFICATION`, submit `/sitemap.xml`, and export the `/rum` stream to an analytics sink (needs owner credentials).
+- [ ] Promote Trusted Types from Report-Only to enforcement once `/csp-report` shows a clean stream from real ad tags.
+- [ ] Add streaming/resumable uploads, server codec/duration/virus scanning, native/hardware encode fallback and a real browser encoder benchmark.
 - [ ] Visual design refresh (awaiting user direction).
 - [ ] Real-provider VAST tag test (needs a live ad tag from the owner).
