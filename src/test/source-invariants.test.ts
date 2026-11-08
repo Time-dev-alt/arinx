@@ -90,6 +90,32 @@ describe("committed-source invariants", () => {
     }
   });
 
+  it("keeps the per-request nonce wired end to end", () => {
+    // A regression here silently downgrades every production response to an
+    // un-nonced policy while the HTML still contains nonced scripts.
+    const server = read("src/server.ts");
+    const router = read("src/router.tsx");
+    const security = read("src/lib/security-headers.server.ts");
+    expect(server).toContain("registerRequestContextStore");
+    expect(server).toContain("runWithRequestContext");
+    expect(server).toContain("newCspNonce()");
+    expect(server).toContain("nonce, dev: IS_DEV");
+    expect(router).toContain("getRequestContext()?.nonce");
+    expect(router).toContain("ssr: { nonce }");
+    expect(security).toContain("'strict-dynamic'");
+    expect(security).toContain("export const DEV_CSP");
+    expect(ENFORCED_CSP).not.toContain("'unsafe-eval'");
+  });
+
+  it("keeps the static security.txt in sync with the worker response", () => {
+    const csp = read("public/_headers");
+    const staticTxt = read("public/.well-known/security.txt");
+    expect(staticTxt).toContain("Contact: mailto:security@arin-x.lovable.app");
+    expect(staticTxt).toContain("Expires: 2030-01-01T00:00:00.000Z");
+    expect(staticTxt).toContain("https://arin-x.lovable.app/.well-known/security.txt");
+    expect(csp).toContain("Content-Security-Policy-Report-Only:");
+  });
+
   it("renders the feed link and a single deduplicable theme-color tag", () => {
     const rootRoute = read("src/routes/__root.tsx");
     expect(rootRoute).toContain('"application/rss+xml"');

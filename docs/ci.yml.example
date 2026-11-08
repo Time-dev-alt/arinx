@@ -1,0 +1,62 @@
+# GitHub Actions CI template.
+# Copy this file to .github/workflows/ci.yml using an account/token with the
+# `workflows` permission — the Arena GitHub App token cannot create workflow
+# files, so it is kept here as a reviewed template instead of being committed
+# directly into .github/.
+# Every command below is also runnable locally before a merge.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Lint, typecheck, test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          # No npm cache: package-lock.json is intentionally ignored by this
+          # Lovable project, so setup-node has no lockfile to key on.
+
+      # npm 10's Arborist fails on this dependency graph with an `edgesOut`
+      # internal error. npm 11 resolves it cleanly.
+      - name: Use npm 11
+        run: npm install -g npm@11
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps --no-audit --no-fund
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Formatting
+        run: npx prettier --check .
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build

@@ -200,6 +200,10 @@ Disallow: /history
 Disallow: /playlist/
 Disallow: /results
 Disallow: /api/
+Disallow: /rum
+Disallow: /healthz
+Disallow: /readyz
+Disallow: /csp-report
 
 # Feeds and sitemap shards are public discovery surfaces.
 Allow: /feed.xml

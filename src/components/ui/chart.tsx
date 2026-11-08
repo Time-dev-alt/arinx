@@ -61,9 +61,9 @@ const ChartContainer = React.forwardRef<
 });
 ChartContainer.displayName = "Chart";
 
-// The generated stylesheet is the only innerHTML sink in the UI kit. Keep it
-// inert even if a chart config ever becomes user-supplied: identifiers may only
-// contain word characters and colour values must not contain CSS delimiters.
+// Chart config can become user-supplied, so identifiers may only contain word
+// characters and colour values must not contain CSS delimiters or functions.
+// The generated stylesheet is emitted as text, never through an HTML sink.
 const safeCssIdent = (value: string) => (/^[A-Za-z0-9_-]+$/.test(value) ? value : "");
 /** Allowlist rather than a blacklist: CSS colour values need a tiny alphabet,
  * and anything outside it (semicolons, braces, slashes, quotes, backslashes)
@@ -86,12 +86,12 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
     return null;
   }
 
-  return (
-    <style
-      dangerouslySetInnerHTML={{
-        __html: Object.entries(THEMES)
-          .map(
-            ([theme, prefix]) => `
+  // Render CSS as a text child, not dangerouslySetInnerHTML: that keeps this
+  // the only first-party DOM sink-free stylesheet and makes the page safe to
+  // run with `require-trusted-types-for 'script'` enforced.
+  const css = Object.entries(THEMES)
+    .map(
+      ([theme, prefix]) => `
 ${prefix} [data-chart=${chartId}] {
 ${colorConfig
   .map(({ key, itemConfig }) => {
@@ -103,11 +103,10 @@ ${colorConfig
   .join("\n")}
 }
 `,
-          )
-          .join("\n"),
-      }}
-    />
-  );
+    )
+    .join("\n");
+
+  return <style>{css}</style>;
 };
 
 const ChartTooltip = RechartsPrimitive.Tooltip;

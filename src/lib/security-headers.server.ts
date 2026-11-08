@@ -1,17 +1,23 @@
 /**
  * Central response-hardening policy for the SSR entry.
  *
- * Design rule: protection must not break the synced Lovable deployment. We
- * therefore enforce only directives that cannot affect rendering today, and
- * ship the complete policy as Report-Only so real-world violations can be
- * collected before flipping `ARINX_CSP_ENFORCE=1`.
+ * Production documents get a per-request nonce and a strict `script-src`
+ * without `'unsafe-inline'` / `'unsafe-eval'`. TanStack Start forwards
+ * `router.options.ssr.nonce` to React's SSR renderer (which nonces every
+ * bootstrap script), to `HeadContent` (which emits `meta[property=csp-nonce]`
+ * and nonces head assets), and router-core's client loader reads that meta back
+ * for dynamically created scripts. Third-party ad scripts are injected by the
+ * nonce-bearing app bundle, so `'strict-dynamic'` permits them without a host
+ * allowlist. Host/`'self'` sources are retained for CSP2 browsers.
+ *
+ * Dev is deliberately downgraded to the compatibility policy: Vite's HMR and
+ * React Refresh preamble are inline scripts the framework cannot nonce.
  *
  * Deliberately avoided:
  *  - X-Frame-Options: the Lovable editor embeds the app and /embed/:id is a
- *    public, frameable player. frame-ancestors lives in the staged policy.
- *  - COOP / COEP by default: cross-origin isolation breaks third-party ad
- *    tags, Google Fonts and Supabase fetches. It is opt-in, scoped to the
- *    upload page, and only needed for multithreaded ffmpeg.wasm.
+ *    public, frameable player. frame-ancestors lives in the CSP.
+ *  - COOP / COEP by default: cross-origin isolation breaks ads, fonts and
+ *    Supabase. Opt-in, scoped to /studio/upload, for multithreaded ffmpeg.wasm.
  */
 
 export interface SecurityContext {
@@ -22,7 +28,18 @@ export interface SecurityContext {
   contentType?: string | null;
 }
 
-const FRAME_ANCESTORS = [
+export interface SecurityOptions {
+  /** Emergency downgrade to the minimal baseline (ARINX_CSP_REPORT_ONLY=1). */
+  downgrade?: boolean;
+  /** Vite dev server: allow inline/eval scripts that cannot be nonced. */
+  dev?: boolean;
+  /** Per-response CSP nonce. Omit for non-document responses. */
+  nonce?: string;
+  /** Promote Trusted Types from Report-Only to enforcement. */
+  trustedTypes?: boolean;
+}
+
+const NARROW_FRAME_ANCESTORS = [
   "'self'",
   "https://*.lovable.dev",
   "https://lovable.dev",
@@ -36,51 +53,54 @@ const FRAME_ANCESTORS = [
 export const BASELINE_CSP =
   "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self' https:";
 
-/**
- * Enforced platform policy. Hosts are deliberately broad because ad snippet
- * domains are owner-configurable, but the high-value restrictions are real:
- * no plugins, no base-tag hijacking, no form exfiltration, no insecure script
- * origins, no HTTP framing ancestors, and no cross-origin worker injection.
- */
-export const ENFORCED_CSP = [
-  "default-src 'self' https: blob: data:",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https: data:",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "img-src 'self' data: blob: https:",
-  "media-src 'self' blob: data: https:",
-  "font-src 'self' data: https://fonts.gstatic.com",
-  "connect-src 'self' https: wss: blob: data:",
-  "worker-src 'self' blob:",
-  "frame-src 'self' https:",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'self' https:",
-  "report-uri /csp-report",
-].join("; ");
+interface PolicyOptions {
+  nonce?: string;
+  dev?: boolean;
+  trustedTypes?: boolean;
+  narrowFrameAncestors?: boolean;
+}
+
+function buildPolicy(options: PolicyOptions = {}): string {
+  const { nonce, dev, trustedTypes, narrowFrameAncestors } = options;
+  const scriptSources = [
+    "'self'",
+    ...(nonce ? [`'nonce-${nonce}'`, "'strict-dynamic'"] : []),
+    ...(dev ? ["'unsafe-inline'", "'unsafe-eval'"] : []),
+    // Kept for CSP1/2 browsers, which ignore 'strict-dynamic'.
+    "https:",
+    "blob:",
+  ].join(" ");
+
+  return [
+    "default-src 'self' https: blob: data:",
+    `script-src ${scriptSources}`,
+    // Inline style attributes are governed by this directive and are used by
+    // every React component, so 'unsafe-inline' stays here by design.
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "img-src 'self' data: blob: https:",
+    "media-src 'self' blob: data: https:",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "connect-src 'self' https: wss: blob: data:",
+    "worker-src 'self' blob:",
+    "frame-src 'self' https:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    `frame-ancestors ${narrowFrameAncestors ? NARROW_FRAME_ANCESTORS : "'self' https:"}`,
+    ...(trustedTypes ? ["require-trusted-types-for 'script'"] : []),
+    "report-uri /csp-report",
+  ].join("; ");
+}
 
 /**
- * Target policy, shipped Report-Only. It removes inline-script/eval escape
- * hatches and enables Trusted Types so the remaining DOM sinks surface in the
- * report stream. Promoted to enforcement only after those reports are clean.
+ * Static asset policy (no nonce — static files are not documents).
+ * `public/_headers` mirrors these two strings for responses served directly
+ * from the Cloudflare ASSETS binding.
  */
-export const TARGET_CSP = [
-  "default-src 'self'",
-  "script-src 'self' blob: https:",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "img-src 'self' data: blob: https:",
-  "media-src 'self' blob: data: https:",
-  "font-src 'self' data: https://fonts.gstatic.com",
-  "connect-src 'self' https: wss: blob: data:",
-  "worker-src 'self' blob:",
-  "frame-src 'self' https:",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  `frame-ancestors ${FRAME_ANCESTORS}`,
-  "require-trusted-types-for 'script'",
-  "report-uri /csp-report",
-].join("; ");
+export const ENFORCED_CSP = buildPolicy();
+export const TARGET_CSP = buildPolicy({ trustedTypes: true, narrowFrameAncestors: true });
+/** Vite dev compatibility policy. */
+export const DEV_CSP = buildPolicy({ dev: true });
 
 export const PERMISSIONS_POLICY = [
   "camera=()",
@@ -131,27 +151,45 @@ export function newRequestId(): string {
 
 /**
  * Builds the CSP headers for one response. Pure and independently testable.
- * `ARINX_CSP_REPORT_ONLY=1` downgrades enforcement to the emergency baseline
- * if a newly deployed third-party tag ever needs a temporary reprieve.
+ * `ARINX_CSP_REPORT_ONLY=1` downgrades enforcement to the emergency baseline.
+ * `ARINX_TRUSTED_TYPES=1` promotes Trusted Types once the ad tags are clean.
  */
-export function buildCspHeaders(reportOnlyEnforcement = envFlag("ARINX_CSP_REPORT_ONLY")): {
-  enforced: string;
-  reportOnly: string | null;
-} {
-  return {
-    enforced: reportOnlyEnforcement ? BASELINE_CSP : ENFORCED_CSP,
-    reportOnly: TARGET_CSP,
-  };
+export function buildCspHeaders(
+  reportOnlyEnforcement = envFlag("ARINX_CSP_REPORT_ONLY"),
+  options: { nonce?: string; dev?: boolean; trustedTypes?: boolean } = {},
+): { enforced: string; reportOnly: string | null } {
+  const trustedTypes = options.trustedTypes ?? envFlag("ARINX_TRUSTED_TYPES");
+  const enforced = reportOnlyEnforcement
+    ? BASELINE_CSP
+    : options.dev
+      ? DEV_CSP
+      : buildPolicy({ nonce: options.nonce, trustedTypes });
+
+  // Report-Only always ships the strictest target so Trusted Types violations
+  // and framing outside the allowlist keep surfacing until the stream is clean.
+  // It carries the same nonce, otherwise first-party scripts would flood it.
+  const reportOnly = buildPolicy({
+    nonce: options.nonce,
+    trustedTypes: true,
+    narrowFrameAncestors: true,
+  });
+
+  return { enforced, reportOnly: reportOnly === enforced ? null : reportOnly };
 }
 
 /** Adds every platform-level header without ever removing app-set headers. */
 export function applySecurityHeaders(
   response: Response,
   context: SecurityContext,
-  downgrade?: boolean,
+  options: SecurityOptions = {},
 ): Response {
   const headers = new Headers(response.headers);
-  const { enforced, reportOnly } = buildCspHeaders(downgrade);
+  const downgrade = options.downgrade ?? envFlag("ARINX_CSP_REPORT_ONLY");
+  const { enforced, reportOnly } = buildCspHeaders(downgrade, {
+    nonce: options.nonce,
+    dev: options.dev,
+    trustedTypes: options.trustedTypes,
+  });
 
   headers.set("Content-Security-Policy", enforced);
   if (reportOnly) headers.set("Content-Security-Policy-Report-Only", reportOnly);
@@ -177,9 +215,7 @@ export function applySecurityHeaders(
     headers.set("Cache-Control", "private, no-store, max-age=0");
   }
 
-  // Opt-in cross-origin isolation, ONLY for the upload document. Multithreaded
-  // ffmpeg.wasm needs SharedArrayBuffer; every other route stays unisolated so
-  // ads, fonts and Supabase keep working.
+  // Opt-in cross-origin isolation, ONLY for the upload document.
   if (envFlag("ARINX_CROSS_ORIGIN_ISOLATION") && context.pathname.startsWith("/studio/upload")) {
     const type = context.contentType ?? headers.get("content-type") ?? "";
     if (type.includes("text/html")) {

@@ -1,8 +1,10 @@
 import "./lib/error-capture";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { handleSeoRequest } from "./lib/seo-routes.server";
+import { handleOpsRequest, isOpsPath, logEvent } from "./lib/ops-routes.server";
 import {
   applySecurityHeaders,
   isPrivatePath,
@@ -10,12 +12,29 @@ import {
   type SecurityContext,
 } from "./lib/security-headers.server";
 import {
+  registerRequestContextStore,
+  runWithRequestContext,
+  newCspNonce,
+  type ArinXRequestContext,
+} from "./lib/request-context";
+import {
+  registerRateLimitBackend,
+  checkRateLimit,
+  getActiveBackend,
+} from "./lib/rate-limit-backend";
+import {
   clientKeyFromRequest,
   isStaticAssetPath,
   LIMITS,
   rateLimitedResponse,
-  requestLimiter,
 } from "@/lib/rate-limit";
+
+// Statically replaced by the TanStack Vite plugin ("true" in dev, "false" in
+// the production build). Vite's HMR / React Refresh preamble cannot be nonced,
+// so dev keeps the compatibility CSP while production gets the strict one.
+const IS_DEV = process.env.TSS_DEV_SERVER === "true";
+
+registerRequestContextStore(new AsyncLocalStorage<ArinXRequestContext>());
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -57,14 +76,14 @@ function safeCspSummary(raw: string): string {
 }
 
 async function handleCspReport(request: Request): Promise<Response> {
-  const limited = requestLimiter.check(`csp:${clientKeyFromRequest(request)}`, LIMITS.cspReport);
+  const limited = await checkRateLimit(`csp:${clientKeyFromRequest(request)}`, LIMITS.cspReport);
   if (!limited.allowed) return rateLimitedResponse(limited);
   const declared = Number(request.headers.get("content-length") ?? 0);
   if (declared > 16_384) return new Response(null, { status: 413 });
   try {
     const body = await request.text();
     if (body.length > 16_384) return new Response(null, { status: 413 });
-    console.warn("[csp-report]", safeCspSummary(body));
+    logEvent("csp-report", { summary: safeCspSummary(body) });
   } catch {
     /* malformed reports are ignored, never surfaced */
   }
@@ -72,7 +91,7 @@ async function handleCspReport(request: Request): Promise<Response> {
 }
 
 // h3 swallows in-handler throws into a normal 500 Response with body
-// {"unhandled":true,"message":"HTTPError"} — try/catch alone never fires for those.
+// {"unhandled":true,"message":"HTTPError"} — try/catch alone never fires.
 async function normalizeCatastrophicSsrResponse(response: Response): Promise<Response> {
   if (response.status < 500) return response;
   const contentType = response.headers.get("content-type") ?? "";
@@ -98,8 +117,10 @@ function isH3SwallowedErrorBody(body: string): boolean {
 }
 
 export default {
-  async fetch(request: Request, env: unknown, ctx: unknown) {
+  async fetch(request: Request, env: unknown, ctx: unknown): Promise<Response> {
     const requestId = newRequestId();
+    const nonce = newCspNonce();
+    const startedAt = Date.now();
     let pathname = "/";
     let isHttps = false;
     try {
@@ -109,50 +130,69 @@ export default {
     } catch {
       /* malformed URL: still answer safely */
     }
+
+    // Bind the selected rate-limit backend to this request's platform env.
+    registerRateLimitBackend(env);
+
     const context: SecurityContext = { pathname, isHttps, requestId };
-    const harden = (response: Response) => {
-      const enriched: SecurityContext = {
-        ...context,
-        contentType: response.headers.get("content-type"),
-      };
-      return applySecurityHeaders(response, enriched);
+    const harden = (response: Response): Response =>
+      applySecurityHeaders(
+        response,
+        { ...context, contentType: response.headers.get("content-type") },
+        { nonce, dev: IS_DEV },
+      );
+
+    const respond = async (): Promise<Response> => {
+      try {
+        if (pathname === "/csp-report") {
+          if (request.method !== "POST") return harden(new Response(null, { status: 405 }));
+          return harden(await handleCspReport(request));
+        }
+
+        const ops = await handleOpsRequest(request);
+        if (ops) return harden(ops);
+
+        // Budget every dynamic request. Static assets and liveness probes are
+        // served by the platform / must never be throttled by our own worker.
+        if (!isStaticAssetPath(pathname) && !isOpsPath(pathname)) {
+          const limited = await checkRateLimit(
+            `doc:${clientKeyFromRequest(request)}`,
+            LIMITS.document,
+          );
+          if (!limited.allowed) return harden(rateLimitedResponse(limited));
+        }
+
+        // Belt-and-braces: the request middleware normally handles these, but
+        // the production entry also serves them so crawlers never 404 a sitemap.
+        const seo = await handleSeoRequest(request);
+        if (seo) {
+          if (isPrivatePath(pathname)) seo.headers.set("Cache-Control", "no-store");
+          return harden(seo);
+        }
+
+        const handler = await getServerEntry();
+        const response = await handler.fetch(request, env, ctx);
+        return harden(await normalizeCatastrophicSsrResponse(response));
+      } catch (error) {
+        console.error(`[${requestId}]`, error);
+        return harden(
+          new Response(renderErrorPage(), {
+            status: 500,
+            headers: { "content-type": "text/html; charset=utf-8" },
+          }),
+        );
+      }
     };
 
-    try {
-      if (pathname === "/csp-report") {
-        if (request.method !== "POST") return harden(new Response(null, { status: 405 }));
-        return harden(await handleCspReport(request));
-      }
-
-      // Budget every dynamic request. Static assets are served by the platform
-      // and are not charged against the SSR budget (dev HMR included).
-      if (!isStaticAssetPath(pathname)) {
-        const limited = requestLimiter.check(
-          `doc:${clientKeyFromRequest(request)}`,
-          LIMITS.document,
-        );
-        if (!limited.allowed) return harden(rateLimitedResponse(limited));
-      }
-
-      // Belt-and-braces: the request middleware normally handles these, but the
-      // production entry also serves them so crawlers never hit a 404 sitemap.
-      const seo = await handleSeoRequest(request);
-      if (seo) {
-        if (isPrivatePath(pathname)) seo.headers.set("Cache-Control", "no-store");
-        return harden(seo);
-      }
-
-      const handler = await getServerEntry();
-      const response = await handler.fetch(request, env, ctx);
-      return harden(await normalizeCatastrophicSsrResponse(response));
-    } catch (error) {
-      console.error(`[${requestId}]`, error);
-      return harden(
-        new Response(renderErrorPage(), {
-          status: 500,
-          headers: { "content-type": "text/html; charset=utf-8" },
-        }),
-      );
-    }
+    const response = await runWithRequestContext({ requestId, nonce }, respond);
+    logEvent("request", {
+      requestId,
+      method: request.method,
+      path: pathname,
+      status: response.status,
+      durationMs: Date.now() - startedAt,
+      limiter: getActiveBackend().name,
+    });
+    return response;
   },
 };
