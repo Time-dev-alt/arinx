@@ -462,6 +462,8 @@ export function useInvalidate() {
 }
 
 // ---------- mutations ----------
+const recordedViews = new Set<string>();
+
 export const actions = {
   async react(uid: string, videoId: string, value: 1 | -1, current: 1 | -1 | 0) {
     if (current === value)
@@ -482,7 +484,20 @@ export const actions = {
     else await supabase.from("watch_later").insert({ user_id: uid, video_id: videoId });
   },
   async recordWatch(uid: string | undefined, videoId: string) {
-    await supabase.rpc("record_view", { _video_id: videoId });
+    // One view per video per browser session: a single mount must not be able
+    // to inflate the counter (StrictMode, re-renders, repeated navigation).
+    // The database remains the authoritative guard; this is a cheap first line.
+    if (!/^[0-9a-f-]{1,64}$/i.test(videoId)) return;
+    const key = `${uid ?? "anon"}:${videoId}`;
+    if (recordedViews.has(key)) return;
+    recordedViews.add(key);
+    if (recordedViews.size > 500) recordedViews.clear();
+    try {
+      await supabase.rpc("record_view", { _video_id: videoId });
+    } catch {
+      recordedViews.delete(key);
+      throw new Error("Could not record the view");
+    }
     if (uid)
       await supabase
         .from("watch_history")
@@ -519,14 +534,33 @@ export async function dataUrlToBlob(d: string) {
   if (!/^data:[a-z0-9/+.-]+;base64,/i.test(d)) throw new Error("Invalid image data");
   return (await fetch(d)).blob();
 }
+const UPLOAD_LIMITS: Record<"videos" | "thumbnails" | "channel-art", number> = {
+  videos: 2 * 1024 * 1024 * 1024,
+  thumbnails: 12 * 1024 * 1024,
+  "channel-art": 12 * 1024 * 1024,
+};
+const ALLOWED_EXTS: Record<"videos" | "thumbnails" | "channel-art", RegExp> = {
+  videos: /^(mp4|webm|mov|m4v)$/,
+  thumbnails: /^(jpg|jpeg|png|webp)$/,
+  "channel-art": /^(jpg|jpeg|png|webp)$/,
+};
+
 export async function uploadFile(
   bucket: "videos" | "thumbnails" | "channel-art",
   uid: string,
   file: Blob,
   ext: string,
 ) {
-  if (!/^[a-z0-9]{1,8}$/i.test(ext)) throw new Error("Invalid file extension");
-  const path = `${uid}/${crypto.randomUUID()}.${ext.toLowerCase()}`;
+  const cleanExt = ext.toLowerCase();
+  if (!ALLOWED_EXTS[bucket].test(cleanExt)) throw new Error("Unsupported file type");
+  if (!file.size) throw new Error("Cannot upload an empty file");
+  if (file.size > UPLOAD_LIMITS[bucket]) {
+    throw new Error(
+      `File exceeds the ${Math.round(UPLOAD_LIMITS[bucket] / 1048576)} MB upload limit`,
+    );
+  }
+  if (!/^[0-9a-f-]{36}$/i.test(uid)) throw new Error("Invalid owner id");
+  const path = `${uid}/${crypto.randomUUID()}.${cleanExt}`;
   const { error } = await supabase.storage
     .from(bucket)
     .upload(path, file, { contentType: file.type || undefined, upsert: false });

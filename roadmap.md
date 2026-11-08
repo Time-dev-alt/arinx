@@ -1,4 +1,5 @@
 # ArinX visitor and creator update
+
 - [x] Growth package: discover feed modes, rising creators, category links, trending periods, expanded sharing, channel sharing, content-specific SEO, sitemap, IP receipts, and 1,000-subscriber eligibility.
   - SEO follow-up: SSR public catalog/`initialData`, per-route canonicals and JSON-LD, dynamic video sitemap at `/sitemap.xml`, crawler directives at `/robots.txt`, stable thumbnail URLs, branded OG/wordmark assets, and crawlable category/creator/video link sections.
 - [x] Fix flagged file-read policy while preserving published media access (`drizzle/migrations/0011_harden_public_content.sql`: storage.objects and comments SELECT policies now require published videos; added a partial index for public feed reads).
@@ -7,5 +8,14 @@
 - [x] Reliable compression/watermark processing and upload cleanup.
 - [x] Sponsor pre-roll upload/preview and VAST network integration.
 - [x] Mid-roll ad schedule, mandatory channel watermarks, HilltopAds verification tag.
+- [x] Platform-level security: shared SSR response hardening (enforced + Report-Only staged CSP, permissions/referrer/nosniff/CORP/HSTS/request ids), rate-limited `POST /csp-report`, per-client document/server-function/sitemap/thumbnail/report budgets, server-function body ceiling, private no-store on authenticated routes, explicit CSRF middleware, HTTPS-only creator links, DOM-imported (no `innerHTML`) ad scripts, allowlisted CSS identifiers/values, and owner-settings write-time validation.
+- [x] Dependency hygiene: `zod` bumped to `4.6.7` (removes the only high-severity production advisory), `@testing-library/dom` declared instead of installed with `--no-save`; `bun.lock` regenerated and verified with `bun install --frozen-lockfile --dry-run`. `npm audit --omit=dev` reports 0 vulnerabilities.
+- [x] Enterprise watermark/compression: pure, tested encode planner; SHA-256-pinned ffmpeg core from three mirrors; multithreaded → single-thread fallback; serial job queue; abort/cancel; 15-minute timeout; guaranteed MEMFS cleanup; exact-size pre-rendered PNG layers (no `scale2ref`); AAC stream-copy on MP4 sources; metadata stripping plus visible/invisible/forensic watermarks; MP4 signature validation; background media probe, frame-grab timeouts and ETA/progress in the upload UI.
+- [x] Stronger SEO and tag fixes: removed the contradictory `WebSite SearchAction`, deduplicated head meta tags (one `theme-color`, `color-scheme`), added RSS/MRSS discovery link, sitemap index + paginated shards, `/feed.xml`, real `lastmod` only (no synthetic "now"), Clip/SeekToAction key moments, full VideoObject carousel ItemLists, canonical-origin thumbnail fallback, an h1 on search results, static/dynamic `robots.txt` parity, and HTTPS-only link validation.
+- [ ] Promote the target CSP from Report-Only to enforcement (requires wiring a per-request nonce through TanStack Router and a clean `/csp-report` stream).
+- [ ] Apply migration `0011` in the live database and smoke-test the live `https://arin-x.lovable.app` origin.
+- [ ] Claim Google Search Console, submit `/sitemap.xml`, and add analytics/Core Web Vitals hooks.
+- [ ] Move rate limiting to shared edge state (KV/Durable Object) for globally exact quotas.
+- [ ] Add server-side MIME/codec/virus validation on uploads and a real benchmark of the browser encoder.
 - [ ] Visual design refresh (awaiting user direction).
 - [ ] Real-provider VAST tag test (needs a live ad tag from the owner).

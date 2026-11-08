@@ -16,4 +16,10 @@ Disallow: /playlist/
 Disallow: /results
 Disallow: /api/
 
+# Feeds and sitemap shards are public discovery surfaces.
+Allow: /feed.xml
+Allow: /sitemap-videos.xml
+Allow: /sitemap-pages.xml
+Allow: /sitemap-channels.xml
+
 Sitemap: https://arin-x.lovable.app/sitemap.xml

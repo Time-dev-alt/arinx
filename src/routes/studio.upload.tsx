@@ -7,7 +7,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { SignInPrompt } from "@/components/common";
 import { supabase } from "@/integrations/supabase/client";
 import { CATEGORIES, dataUrlToBlob, uploadFile, useAuth, type Visibility } from "@/lib/api";
-import { compressVideo, type CompressPreset } from "@/lib/compress";
+import { compressVideo, resetEncoder, type CompressPreset } from "@/lib/compress";
+import { probeMedia } from "@/lib/media-probe";
+import { MAX_INPUT_BYTES, type MediaProbe } from "@/lib/media-plan";
 import { useSiteSettings } from "@/lib/settings";
 import { duration as fmt, pageHead } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -17,29 +19,55 @@ export const Route = createFileRoute("/studio/upload")({
   component: UploadPage,
 });
 
+/** Waits for a media event with a hard timeout so a corrupt file cannot hang UI. */
+function mediaEvent<T extends HTMLElement>(el: T, event: string, ms = 8_000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      el.removeEventListener(event, done);
+      reject(new Error(`Timed out waiting for ${event}`));
+    }, ms);
+    const done = () => {
+      window.clearTimeout(timer);
+      el.removeEventListener(event, done);
+      resolve();
+    };
+    el.addEventListener(event, done, { once: true });
+  });
+}
+
 async function grabFrames(
   url: string,
 ): Promise<{ frames: string[]; duration: number; vertical: boolean }> {
   const v = document.createElement("video");
   v.src = url;
   v.muted = true;
-  v.crossOrigin = "anonymous";
-  await new Promise((r, j) => {
-    v.onloadeddata = r;
-    v.onerror = j;
-  });
-  const frames: string[] = [];
-  for (const p of [0.15, 0.45, 0.75]) {
-    v.currentTime = v.duration * p;
-    await new Promise((r) => (v.onseeked = r));
-    const c = document.createElement("canvas");
-    const scale = Math.min(1, 640 / v.videoWidth);
-    c.width = v.videoWidth * scale;
-    c.height = v.videoHeight * scale;
-    c.getContext("2d")!.drawImage(v, 0, 0, c.width, c.height);
-    frames.push(c.toDataURL("image/jpeg", 0.8));
+  v.preload = "auto";
+  try {
+    const loaded = mediaEvent(v, "loadeddata");
+    v.load();
+    await loaded;
+    const frames: string[] = [];
+    if (!Number.isFinite(v.duration) || v.duration <= 0) throw new Error("Unknown duration");
+    for (const p of [0.15, 0.45, 0.75]) {
+      const target = Math.min(v.duration - 0.05, Math.max(0, v.duration * p));
+      // Seeking to the current time emits no `seeked` event.
+      if (Math.abs(v.currentTime - target) >= 0.01) {
+        const seeked = mediaEvent(v, "seeked", 6_000);
+        v.currentTime = target;
+        await seeked;
+      }
+      const c = document.createElement("canvas");
+      const scale = Math.min(1, 640 / Math.max(1, v.videoWidth));
+      c.width = Math.max(1, Math.round(v.videoWidth * scale));
+      c.height = Math.max(1, Math.round(v.videoHeight * scale));
+      c.getContext("2d")?.drawImage(v, 0, 0, c.width, c.height);
+      frames.push(c.toDataURL("image/jpeg", 0.8));
+    }
+    return { frames, duration: v.duration, vertical: v.videoHeight > v.videoWidth };
+  } finally {
+    v.removeAttribute("src");
+    v.load();
   }
-  return { frames, duration: v.duration, vertical: v.videoHeight > v.videoWidth };
 }
 
 function UploadPage() {
@@ -55,6 +83,8 @@ function UploadPage() {
   const [dur, setDur] = useState(0);
   const [drag, setDrag] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [probe, setProbe] = useState<MediaProbe | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const [f, setF] = useState({
     title: "",
     description: "",
@@ -71,14 +101,23 @@ function UploadPage() {
     },
     [preview],
   );
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const pick = async (fl: File | undefined) => {
     if (!fl) return;
     if (!fl.type.startsWith("video/")) return toast.error("Please choose a video file");
+    if (fl.size > MAX_INPUT_BYTES)
+      return toast.error("Files over 2 GB cannot be processed in the browser");
+    if (!fl.size) return toast.error("That file is empty");
     const url = URL.createObjectURL(fl);
     setFile(fl);
     setPreview(url);
+    setProbe(null);
     setF((x) => ({ ...x, title: x.title || fl.name.replace(/\.[^.]+$/, "") }));
+    // Probe while the creator fills in the form — zero perceived latency.
+    void probeMedia(fl)
+      .then(setProbe)
+      .catch(() => {});
     try {
       const r = await grabFrames(url);
       setFrames(r.frames);
@@ -90,10 +129,21 @@ function UploadPage() {
     }
   };
 
+  const cancel = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    resetEncoder();
+    setBusy(false);
+    setStage("");
+    toast.message("Upload cancelled");
+  };
+
   const publish = async () => {
     if (!uid) return;
     if (!file || !f.title.trim()) return toast.error("Add a video and a title");
     setBusy(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       // Watermarks are always applied; compression preset falls back to "quality" when shrinking is off.
       const { data: wm } = await supabase
@@ -118,14 +168,22 @@ function UploadPage() {
           (wm?.handle ? `@${wm.handle}` : settings?.watermark_text || "ArinX"),
         ownerTag: wm?.handle ? `@${wm.handle}` : uid.slice(0, 8),
         watermarkPosition: settings?.watermark_position ?? "bottom-right",
-        onProgress: (ratio, stage) =>
-          setStage(ratio > 0 ? `${stage} ${Math.round(ratio * 100)}%` : stage),
+        probe,
+        signal: controller.signal,
+        onProgress: (ratio, stage, eta) =>
+          setStage(
+            ratio > 0
+              ? `${stage} ${Math.round(ratio * 100)}%${eta ? ` · ~${Math.ceil(eta / 60)} min left` : ""}`
+              : stage,
+          ),
       });
       const toUpload: Blob = r.blob;
       const ext = "mp4";
       const fingerprint = r.fingerprint;
       toast.success(
-        `Watermarked · ${(r.originalSize / 1048576).toFixed(0)} MB → ${(r.compressedSize / 1048576).toFixed(0)} MB`,
+        `Watermarked in ${(r.elapsedMs / 1000).toFixed(0)}s · ` +
+          `${(r.originalSize / 1048576).toFixed(1)} MB → ${(r.compressedSize / 1048576).toFixed(1)} MB` +
+          `${r.width ? ` · ${r.width}×${r.height}` : ""}${r.multithreaded ? " · multi-threaded" : ""}`,
       );
       setStage("Uploading video…");
       const videoPath = await uploadFile("videos", uid, toUpload, ext);
@@ -160,8 +218,11 @@ function UploadPage() {
       toast.success("Video published");
       nav({ to: "/studio" });
     } catch (e) {
+      if (controller.signal.aborted || (e instanceof DOMException && e.name === "AbortError"))
+        return;
       toast.error(`Upload failed: ${e instanceof Error ? e.message : "please try again"}`);
     } finally {
+      abortRef.current = null;
       setBusy(false);
       setStage("");
     }
@@ -350,21 +411,32 @@ function UploadPage() {
             <div className="flex gap-2">
               <button
                 onClick={() => {
+                  abortRef.current?.abort();
+                  resetEncoder();
                   setFile(null);
                   setFrames([]);
                   setThumb("");
+                  setProbe(null);
                 }}
                 className="flex-1 rounded-full bg-muted py-2 text-sm font-medium hover:bg-accent"
               >
                 Discard
               </button>
-              <button
-                disabled={busy}
-                onClick={publish}
-                className="flex-1 rounded-full bg-primary py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-              >
-                {busy ? stage || "Publishing…" : "Publish"}
-              </button>
+              {busy ? (
+                <button
+                  onClick={cancel}
+                  className="flex-1 rounded-full bg-destructive py-2 text-sm font-medium text-destructive-foreground"
+                >
+                  {stage || "Working…"} · Cancel
+                </button>
+              ) : (
+                <button
+                  onClick={publish}
+                  className="flex-1 rounded-full bg-primary py-2 text-sm font-medium text-primary-foreground"
+                >
+                  Publish
+                </button>
+              )}
             </div>
           </aside>
         </div>

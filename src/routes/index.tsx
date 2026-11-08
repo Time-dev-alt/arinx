@@ -9,7 +9,7 @@ import { Grid, Loading, Pills } from "@/components/common";
 import { AdSlot } from "@/components/AdSlot";
 import { publicCatalog } from "@/lib/catalog.functions";
 import { CreatorLinks, CategoryLinks, VideoLinks } from "@/components/SeoLinks";
-import { breadcrumbJsonLd, itemListJsonLd } from "@/lib/seo";
+import { breadcrumbJsonLd, videoCarouselJsonLd } from "@/lib/seo";
 import { SITE_URL } from "@/lib/site";
 
 export const Route = createFileRoute("/")({
@@ -22,11 +22,7 @@ export const Route = createFileRoute("/")({
       {
         path: "/",
         jsonLd: [
-          itemListJsonLd(
-            (loaderData?.videos ?? []).map((v: Video) => ({ id: v.id, title: v.title })),
-            "Latest videos on ArinX",
-            SITE_URL,
-          ),
+          videoCarouselJsonLd(loaderData?.videos ?? [], "Latest videos on ArinX", SITE_URL),
           breadcrumbJsonLd([{ name: "Home", path: "/" }]),
         ],
       },

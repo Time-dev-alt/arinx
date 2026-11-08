@@ -91,7 +91,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         name: "robots",
         content: "index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1",
       },
+      // Head content deduplicates meta tags by name; one theme-color only.
       { name: "theme-color", content: "#0f0f0f" },
+      { name: "color-scheme", content: "dark light" },
       { name: "application-name", content: "ArinX" },
       { name: "author", content: "ArinX" },
       { property: "og:title", content: "ArinX — Watch, share and create videos online" },
@@ -123,6 +125,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "stylesheet", href: appCss },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon", sizes: "256x256" },
       { rel: "apple-touch-icon", href: "/logo.png" },
+      {
+        rel: "alternate",
+        type: "application/rss+xml",
+        title: "ArinX — latest videos",
+        href: "/feed.xml",
+      },
     ],
   }),
   shellComponent: RootShell,

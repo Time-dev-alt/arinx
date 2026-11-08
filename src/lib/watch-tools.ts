@@ -36,7 +36,9 @@ export function safeExternalUrl(value: string | null | undefined): string | null
   if (!trimmed || trimmed.length > 2048 || hasControlChars(trimmed)) return null;
   try {
     const url = new URL(trimmed);
-    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    // HTTPS only: creator-supplied links must never downgrade a secure page or
+    // leak referrer/cookie data over an insecure connection.
+    if (url.protocol !== "https:") return null;
     if (url.username || url.password) return null;
     return url.href;
   } catch {

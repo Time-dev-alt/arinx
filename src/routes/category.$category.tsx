@@ -7,7 +7,7 @@ import { CategoryLinks, VideoLinks } from "@/components/SeoLinks";
 import { pageHead } from "@/lib/format";
 import { publicVideosQuery, type Video } from "@/lib/api";
 import { publicCatalog } from "@/lib/catalog.functions";
-import { breadcrumbJsonLd, categoryJsonLd, itemListJsonLd } from "@/lib/seo";
+import { breadcrumbJsonLd, categoryJsonLd, videoCarouselJsonLd } from "@/lib/seo";
 import { canonicalUrl, categoryPath, PUBLIC_CATEGORIES } from "@/lib/site";
 
 const titleCase = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
@@ -30,8 +30,8 @@ export const Route = createFileRoute("/category/$category")({
         noindex: !isKnown(params.category),
         jsonLd: [
           categoryJsonLd(name, videos.length),
-          itemListJsonLd(
-            videos.map((v) => ({ id: v.id, title: v.title })),
+          videoCarouselJsonLd(
+            videos,
             `${name} videos on ArinX`,
             canonicalUrl(categoryPath(params.category)),
           ),

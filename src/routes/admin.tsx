@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/api";
 import { compact, pageHead } from "@/lib/format";
 import { useIsAdmin, useSiteSettings, type SiteSettings } from "@/lib/settings";
+import { validateSiteSettings } from "@/lib/settings-validation";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/admin")({
@@ -81,15 +82,24 @@ function AdminPage() {
 
   const up = <K extends keyof SiteSettings>(k: K, v: SiteSettings[K]) => setS({ ...s, [k]: v });
   const save = async () => {
-    setSaving(true);
     const { id: _id, updated_at: _u, ...rest } = s;
+    // Validate *before* writing: the publishable-key client has no server-side
+    // constraints, so this is the only place dangerous stored values can be
+    // rejected. Render-time sanitizers remain the second line of defence.
+    const { value, errors, cleaned } = validateSiteSettings(rest);
+    if (errors.length) {
+      toast.error(errors[0]);
+      return;
+    }
+    setSaving(true);
     const { error } = await supabase
       .from("site_settings")
-      .update({ ...rest, updated_at: new Date().toISOString() })
+      .update({ ...value, updated_at: new Date().toISOString() })
       .eq("id", 1);
     setSaving(false);
     if (error) return toast.error(error.message);
-    toast.success("Settings saved");
+    if (cleaned) setS({ ...s, ...value });
+    toast.success(cleaned ? "Settings saved (some values were cleaned)" : "Settings saved");
     qc.invalidateQueries({ queryKey: ["site_settings"] });
   };
 
