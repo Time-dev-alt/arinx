@@ -52,6 +52,25 @@ export function safeHttpsUrl(value: string | null | undefined): string | null {
   return url?.startsWith("https://") ? url : null;
 }
 
+/** Accept only relative object keys for private-storage thumbnail lookups. */
+export function safeStorageObjectPath(value: string | null | undefined): string | null {
+  if (!value || typeof value !== "string") return null;
+  const path = value.trim();
+  if (
+    !path ||
+    path.length > 1024 ||
+    path.startsWith("/") ||
+    path.startsWith("\\") ||
+    /^https?:\/\//i.test(path) ||
+    path.includes("..") ||
+    path.includes("\\") ||
+    hasControlChars(path)
+  ) {
+    return null;
+  }
+  return path;
+}
+
 export const CHANNEL_LINKS = [
   ["website_url", "Website"],
   ["instagram_url", "Instagram"],
