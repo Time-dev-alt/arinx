@@ -16,7 +16,7 @@ import {
   thumbnailProxyUrl,
   watchPath,
 } from "@/lib/site";
-import { safeExternalUrl } from "@/lib/watch-tools";
+import { safeStorageObjectPath } from "@/lib/watch-tools";
 import {
   clientKeyFromRequest,
   LIMITS,
@@ -216,8 +216,10 @@ async function thumbnailResponse(id: string): Promise<Response> {
       .eq("visibility", "public")
       .maybeSingle();
     if (error || !data?.thumbnail_url) return redirect(fallback);
-    const path = data.thumbnail_url as string;
-    if (/^https?:\/\//i.test(path)) return redirect(safeExternalUrl(path) ?? fallback);
+    // Thumbnails are stored in our private bucket. Never turn creator-supplied
+    // external URLs into redirects from this trusted crawler endpoint.
+    const path = safeStorageObjectPath(data.thumbnail_url);
+    if (!path) return redirect(fallback);
     const { data: signed } = await client.storage.from("thumbnails").createSignedUrl(path, 3600);
     return redirect(signed?.signedUrl ?? fallback);
   } catch {

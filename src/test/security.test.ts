@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { sanitizeAdMarkup, sanitizeSearchTerm } from "@/lib/sanitize";
-import { safeExternalUrl, safeHttpsUrl, startSeconds } from "@/lib/watch-tools";
+import {
+  safeExternalUrl,
+  safeHttpsUrl,
+  safeStorageObjectPath,
+  startSeconds,
+} from "@/lib/watch-tools";
 
 describe("ad snippet sanitizer", () => {
   it("keeps HTTPS script tags and upgrades protocol-relative URLs", () => {
@@ -77,5 +82,15 @@ describe("external URL validation", () => {
     expect(startSeconds(Infinity)).toBe(0);
     expect(startSeconds(1e300)).toBe(0);
     expect(startSeconds("90")).toBe(90);
+  });
+});
+
+describe("thumbnail storage path validation", () => {
+  it("accepts relative object keys and rejects redirect destinations", () => {
+    expect(safeStorageObjectPath("user-id/thumb.jpg")).toBe("user-id/thumb.jpg");
+    expect(safeStorageObjectPath("https://evil.example/payload")).toBeNull();
+    expect(safeStorageObjectPath("//evil.example/payload")).toBeNull();
+    expect(safeStorageObjectPath("../outside.jpg")).toBeNull();
+    expect(safeStorageObjectPath("user-id\\thumb.jpg")).toBeNull();
   });
 });

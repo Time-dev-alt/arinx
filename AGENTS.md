@@ -8,3 +8,5 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- Keep channel subscriber totals and video view totals outside client-editable column grants, because these popularity and monetization values are derived from trusted events.
