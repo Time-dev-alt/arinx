@@ -50,10 +50,12 @@ Rate-limit bindings (`ARINX_RATE_LIMITER`, `ARINX_RATE_LIMITS_DO`,
 Apply in order in the Supabase SQL editor or with `supabase db push`:
 
 1. `0011_harden_public_content.sql` — published-only storage and comment reads.
-2. `0012_enterprise_constraints.sql` — settings constraints, storage object
+2. `0012_restrict_profile_and_video_counter_updates.sql` — column-level UPDATE grants.
+3. `0013_restrict_counter_insert_values.sql` — column-level INSERT grants.
+4. `0014_enterprise_constraints.sql` — settings constraints, storage object
    validation trigger, video bounds, admin audit trail.
 
-`0012` adds all CHECK constraints as `NOT VALID` so historical rows are not
+`0014` adds all CHECK constraints as `NOT VALID` so historical rows are not
 rejected. After backfilling/cleaning legacy rows, optionally run
 `ALTER TABLE … VALIDATE CONSTRAINT …` for each one to make them authoritative
 for pre-existing data too.
@@ -96,7 +98,7 @@ lines. Filter by metric and path; values are rounded integers (CLS is scaled by
 
 ### Migration failure
 
-Both migrations are additive and use `IF NOT EXISTS` / `DROP CONSTRAINT IF
+All migrations are additive and use `IF NOT EXISTS` / `DROP CONSTRAINT IF
 EXISTS`. If a constraint add fails because a column is missing, confirm the
 earlier migrations (especially `0006` and `0007`) were applied first.
 

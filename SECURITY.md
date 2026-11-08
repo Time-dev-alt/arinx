@@ -45,7 +45,7 @@ deployed to `https://arin-x.lovable.app`; there are no long-lived release lines.
   than through an HTML sink.
 - **Uploads.** Client-side magic-byte and MIME validation plus bounded sizes.
   The authoritative controls are PostgreSQL constraints and a
-  `storage.objects` trigger in `drizzle/migrations/0012_enterprise_constraints.sql`.
+  `storage.objects` trigger in `drizzle/migrations/0014_enterprise_constraints.sql`.
 - **Database.** Row Level Security on every public table; owner-scoped reads,
   writes and storage objects; admin-only settings writes recorded in an
   append-only `public.security_audit` table.

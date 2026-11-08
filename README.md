@@ -120,13 +120,13 @@ without an application-code change.
 
 ### Server-side enforcement
 
-`drizzle/migrations/0012_enterprise_constraints.sql` moves validation into
+`drizzle/migrations/0014_enterprise_constraints.sql` moves validation into
 PostgreSQL where a modified browser client cannot bypass it: HTTPS-only and
 bounded owner settings, enum allowlists, a `storage.objects` trigger enforcing
 owner-scoped filenames, MIME types and size ceilings, video metadata bounds,
 and an immutable admin audit trail. The client-side magic-byte check in
 `src/lib/file-signatures.ts` is the fast first line of defence; the database
-trigger is authoritative. **Apply `0011` and `0012` in the live database.**
+trigger is authoritative. **Apply `0011`, `0012`, `0013` and `0014` in the live database.**
 
 ### Encoder and crawler surfaces
 
@@ -158,7 +158,7 @@ npm run build
 
 ### Remaining operator work (needs credentials / live access)
 
-- Apply migrations `0011` and `0012` in the live Supabase database, then smoke
+- Apply migrations `0011`–`0014` in the live Supabase database, then smoke
   test the live `https://arin-x.lovable.app` origin.
 - Bind `ARINX_RATE_LIMITER` (or the Durable Object) in the deployed Wrangler
   config for globally exact quotas.

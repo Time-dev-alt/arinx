@@ -15,9 +15,9 @@
 - [x] Enforced nonce-based CSP: per-request AsyncLocalStorage nonce, `router.options.ssr.nonce`, `meta[property=csp-nonce]`, `'strict-dynamic'`, no inline/eval in production, dev-only compatibility policy, Trusted Types promotion flag, and `public/_headers` parity. Verified in the built worker (every executable script carries the response nonce).
 - [x] Operational platform: `/healthz`, `/readyz`, RFC 9116 `/.well-known/security.txt`, validated `/rum` Core Web Vitals beacon (LCP/CLS/INP/FCP/TTFB/long tasks), structured PII-free request logs and a Google Search Console verification hook.
 - [x] Pluggable globally exact rate limiting: Cloudflare native binding, sharded Durable Object, KV backend and local fallback behind one `checkRateLimit()` API; all document/server-function/sitemap/thumbnail/report/rum call sites migrated; fails open on backend errors. 100 unit tests pass.
-- [x] Server-side enforcement authored in `drizzle/migrations/0012_enterprise_constraints.sql`: HTTPS/bounded settings constraints, `storage.objects` MIME/size/path trigger, video metadata bounds, admin audit trail, plus client-side magic-byte and MIME validation.
+- [x] Server-side enforcement authored in `drizzle/migrations/0014_enterprise_constraints.sql`: HTTPS/bounded settings constraints, `storage.objects` MIME/size/path trigger, video metadata bounds, admin audit trail, plus client-side magic-byte and MIME validation.
 - [x] Sink-free first-party UI: chart CSS emitted as text (no `dangerouslySetInnerHTML`), Trusted-Types-safe ad script cloning, corrected `meta[property=csp-nonce]` lookup.
-- [ ] Apply migrations `0011` **and** `0012` in the live database and smoke-test the live `https://arin-x.lovable.app` origin (needs owner/DB access).
+- [ ] Apply migrations `0011`–`0014` in the live database and smoke-test the live `https://arin-x.lovable.app` origin (needs owner/DB access).
 - [ ] Bind `ARINX_RATE_LIMITER` (or `ARINX_RATE_LIMITS_DO`) in the deployed Wrangler config so quotas are globally exact rather than isolate-local (needs platform access).
 - [ ] Claim Google Search Console, set `VITE_GOOGLE_SITE_VERIFICATION`, submit `/sitemap.xml`, and export the `/rum` stream to an analytics sink (needs owner credentials).
 - [ ] Promote Trusted Types from Report-Only to enforcement once `/csp-report` shows a clean stream from real ad tags.
