@@ -4,6 +4,7 @@ import type { Catalog } from "@/lib/catalog";
 import { DEMO_MODE, demoCatalog } from "@/lib/demo-data";
 import { publicDbClient } from "@/lib/public-db";
 import { safeExternalUrl } from "@/lib/watch-tools";
+import { signPublicMediaMap, type MediaBucket } from "@/lib/media-signing.server";
 
 type ProfileRow = {
   id: string;
@@ -38,23 +39,16 @@ type VideoRow = {
   profiles: ProfileRow | null;
 };
 
-const SIGN_TTL = 60 * 60 * 24;
-
 async function signMap(
-  client: NonNullable<ReturnType<typeof publicDbClient>>,
-  bucket: string,
+  bucket: MediaBucket,
   paths: Array<string | null | undefined>,
 ): Promise<Record<string, string>> {
   const unique = [
     ...new Set(
       paths.filter((p): p is string => !!p && !p.startsWith("http") && !p.startsWith("data:")),
     ),
-  ].slice(0, 300);
-  const out: Record<string, string> = {};
-  if (!unique.length) return out;
-  const { data } = await client.storage.from(bucket).createSignedUrls(unique, SIGN_TTL);
-  for (const item of data ?? []) if (item.signedUrl && item.path) out[item.path] = item.signedUrl;
-  return out;
+  ].slice(0, 200);
+  return signPublicMediaMap(bucket, unique);
 }
 
 const pick = (map: Record<string, string>, path: string | null) =>
@@ -122,13 +116,8 @@ export const publicCatalog = createServerFn({ method: "GET" })
 
       const typed = rows as unknown as VideoRow[];
       const [thumbs, art] = await Promise.all([
+        signMap("thumbnails", typed.map((r) => r.thumbnail_url)),
         signMap(
-          client,
-          "thumbnails",
-          typed.map((r) => r.thumbnail_url),
-        ),
-        signMap(
-          client,
           "channel-art",
           typed.flatMap((r) => [r.profiles?.avatar_url, r.profiles?.banner_url]),
         ),

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { safeExternalUrl } from "@/lib/watch-tools";
 import { sanitizeSearchTerm } from "@/lib/sanitize";
+import { signPublicMedia } from "@/lib/media.functions";
 
 export type Visibility = "public" | "unlisted" | "private";
 
@@ -70,7 +71,7 @@ export const CATEGORIES = [
 ];
 
 // ---------- media signing (buckets are private) ----------
-const SIGN_TTL = 60 * 60 * 24;
+const SIGN_TTL = 60 * 60;
 async function signMany(bucket: string, paths: (string | null | undefined)[]) {
   const unique = [
     ...new Set(
@@ -79,8 +80,19 @@ async function signMany(bucket: string, paths: (string | null | undefined)[]) {
   ];
   const out: Record<string, string> = {};
   if (!unique.length) return out;
-  const { data } = await supabase.storage.from(bucket).createSignedUrls(unique, SIGN_TTL);
-  for (const d of data ?? []) if (d.signedUrl && d.path) out[d.path] = d.signedUrl;
+  if (bucket === "videos" || bucket === "thumbnails" || bucket === "channel-art") {
+    try {
+      Object.assign(out, await signPublicMedia({ data: { bucket, paths: unique.slice(0, 200) } }));
+    } catch {
+      // Fail closed for public link signing; the direct storage policy still
+      // permits owners to sign files in their own account folder.
+    }
+  }
+  const ownPaths = unique.filter((path) => !out[path]);
+  if (ownPaths.length) {
+    const { data } = await supabase.storage.from(bucket).createSignedUrls(ownPaths, SIGN_TTL);
+    for (const d of data ?? []) if (d.signedUrl && d.path) out[d.path] = d.signedUrl;
+  }
   return out;
 }
 const pick = (map: Record<string, string>, p: string | null) =>
@@ -412,6 +424,12 @@ export async function signVideo(path: string) {
   if (!path || path.startsWith("http") || path.includes("..")) {
     throw new Error("Invalid media path");
   }
+  try {
+    const signed = await signPublicMedia({ data: { bucket: "videos", paths: [path] } });
+    if (signed[path]) return signed[path];
+  } catch {
+    // Private video playback remains possible only for its owner.
+  }
   const { data, error } = await supabase.storage.from("videos").createSignedUrl(path, SIGN_TTL);
   if (error) throw error;
   return data.signedUrl;
@@ -419,7 +437,8 @@ export async function signVideo(path: string) {
 export const videoSrcQuery = (path: string) =>
   queryOptions({
     queryKey: ["src", path],
-    staleTime: 60 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 45 * 60 * 1000,
     queryFn: () => signVideo(path),
   });
 

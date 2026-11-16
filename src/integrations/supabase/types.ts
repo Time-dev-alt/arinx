@@ -215,6 +215,30 @@ export type Database = {
         }
         Relationships: []
       }
+      security_audit: {
+        Row: {
+          action: string
+          actor: string | null
+          id: number
+          occurred_at: string
+          target: string
+        }
+        Insert: {
+          action: string
+          actor?: string | null
+          id?: never
+          occurred_at?: string
+          target: string
+        }
+        Update: {
+          action?: string
+          actor?: string | null
+          id?: never
+          occurred_at?: string
+          target?: string
+        }
+        Relationships: []
+      }
       site_settings: {
         Row: {
           ads_enabled: boolean

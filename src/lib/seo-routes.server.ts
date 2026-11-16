@@ -17,6 +17,7 @@ import {
   watchPath,
 } from "@/lib/site";
 import { safeStorageObjectPath } from "@/lib/watch-tools";
+import { signPublicMediaMap } from "@/lib/media-signing.server";
 import {
   clientKeyFromRequest,
   LIMITS,
@@ -220,8 +221,8 @@ async function thumbnailResponse(id: string): Promise<Response> {
     // external URLs into redirects from this trusted crawler endpoint.
     const path = safeStorageObjectPath(data.thumbnail_url);
     if (!path) return redirect(fallback);
-    const { data: signed } = await client.storage.from("thumbnails").createSignedUrl(path, 3600);
-    return redirect(signed?.signedUrl ?? fallback);
+    const signed = await signPublicMediaMap("thumbnails", [path]);
+    return redirect(signed[path] ?? fallback);
   } catch {
     return redirect(fallback);
   }

@@ -4,6 +4,7 @@ import { DEMO_MODE, demoChannelMeta, demoVideoMeta } from "@/lib/demo-data";
 import { publicDbClient } from "@/lib/public-db";
 import { cleanMetaText } from "@/lib/seo";
 import { thumbnailProxyUrl } from "@/lib/site";
+import { signPublicMediaMap } from "@/lib/media-signing.server";
 
 const VIDEO_ID = /^[0-9a-f-]{36}$/i;
 
@@ -52,10 +53,10 @@ export const publicContent = createServerFn({ method: "GET" })
           .order("created_at", { ascending: false })
           .limit(24);
         const avatarPath = profile.avatar_url as string | null;
-        const { data: signedAvatar } =
+        const signedAvatars =
           avatarPath && !/^(https?:|data:)/i.test(avatarPath)
-            ? await client.storage.from("channel-art").createSignedUrl(avatarPath, 60 * 60 * 24)
-            : { data: null };
+            ? await signPublicMediaMap("channel-art", [avatarPath])
+            : {};
         const channelName = cleanMetaText(profile.name, 120) || "ArinX creator";
         return {
           kind: "channel",
@@ -71,7 +72,9 @@ export const publicContent = createServerFn({ method: "GET" })
           avatar:
             avatarPath && /^(https?:|data:)/i.test(avatarPath)
               ? avatarPath
-              : (signedAvatar?.signedUrl ?? null),
+              : avatarPath
+                ? (signedAvatars[avatarPath] ?? null)
+                : null,
           recentVideos: ((videos ?? []) as unknown as ChannelVideoRow[]).map((v) => ({
             kind: "video" as const,
             id: v.id,

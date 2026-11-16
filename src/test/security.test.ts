@@ -6,6 +6,7 @@ import {
   safeStorageObjectPath,
   startSeconds,
 } from "@/lib/watch-tools";
+import { isSafeMediaObjectPath } from "@/lib/media-path";
 
 describe("ad snippet sanitizer", () => {
   it("keeps HTTPS script tags and upgrades protocol-relative URLs", () => {
@@ -92,5 +93,31 @@ describe("thumbnail storage path validation", () => {
     expect(safeStorageObjectPath("//evil.example/payload")).toBeNull();
     expect(safeStorageObjectPath("../outside.jpg")).toBeNull();
     expect(safeStorageObjectPath("user-id\\thumb.jpg")).toBeNull();
+  });
+});
+
+describe("media object ownership paths", () => {
+  const owner = "5f081ae8-2058-45fb-8683-14f44438189e";
+
+  it("accepts only ArinX upload UUID paths belonging to the requested owner", () => {
+    expect(
+      isSafeMediaObjectPath(
+        `${owner}/0c6aac9e-7849-455a-b7e7-e7f3ed84c6c6.mp4`,
+        owner,
+      ),
+    ).toBe(true);
+    expect(
+      isSafeMediaObjectPath(
+        "555dac42-a372-4f8a-b249-9cc80d848a6f/0c6aac9e-7849-455a-b7e7-e7f3ed84c6c6.mp4",
+        owner,
+      ),
+    ).toBe(false);
+    expect(isSafeMediaObjectPath(`${owner}/file.mp4`, owner)).toBe(false);
+    expect(
+      isSafeMediaObjectPath(
+        `${owner}/0c6aac9e-7849-455a-b7e7-e7f3ed84c6c6.svg`,
+        owner,
+      ),
+    ).toBe(false);
   });
 });

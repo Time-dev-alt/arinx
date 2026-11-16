@@ -10,3 +10,4 @@
 <!-- LOVABLE:END -->
 
 - Keep channel subscriber totals and video view totals outside client-editable column grants, because these popularity and monetization values are derived from trusted events.
+- Serve public and unlisted media through short-lived server-signed links only after confirming the object is referenced by visible content; keep direct storage reads owner-scoped to prevent cross-account file access.
